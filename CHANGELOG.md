@@ -1,6 +1,22 @@
 # Changelog
 
-All notable changes to `swift-teleport` are documented in this file.
+All notable changes to this project will be documented in this file.
+
+## [calver-released]
+
+<!-- USER-EDITABLE SECTION START -->
+<!-- Add your curated release notes here. -->
+<!-- USER-EDITABLE SECTION END -->
+
+### 📚 Documentation
+
+- Make the independent-review lenses phase-aware (closes #3)
+- AGENTS.md — pinned base text (drop Goldmine variant) (closes #7) ([#8](https://github.com/cad0p/swift-teleport/pull/8))
+
+### ⚙️ Miscellaneous Tasks
+
+- Add the package-version and release-PR validators (closes #5)
+
 
 ## [0.1.0] - 2026-09-23
 
