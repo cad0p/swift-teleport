@@ -1,0 +1,12 @@
+# SwiftPM — a library never commits its resolved dependency graph.
+Package.resolved
+.swiftpm/
+.build/
+
+# Python helpers (the CI boundary/license scripts run with -B, but keep the
+# ignore so a manual run never leaves untracked bytecode).
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
