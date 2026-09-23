@@ -1,0 +1,29 @@
+# Auto Release — semver-calver hybrid release (cad0p/semver-calver-release).
+#
+# On a push to `main`, the action computes the release version from
+# `package.json` (the version shim), tags `vX.Y.Z` + the floating `vX`/`vX.Y`
+# tags, and creates the GitHub release. No npm publish (this is a Swift
+# package). `workflow_dispatch` is the manual retrigger (a workflow added by an
+# API-created squash merge may not fire on that same push).
+#
+# With the shim at 0.1.0 and no `v0.1.0` tag, the first `main` push cuts the
+# stable `v0.1.0` plus the floating tags.
+
+name: Auto Release
+
+on:
+  push:
+    branches: [main, 'release/*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: cad0p/semver-calver-release/release@v1
+        with:
+          skip_release: ${{ github.ref != 'refs/heads/main' }}

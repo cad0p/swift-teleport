@@ -1,0 +1,63 @@
+# swift-teleport CI.
+#
+# Two jobs:
+#   - `headers` (ubuntu): the package boundary + license gate — no tracked file
+#     carries the AGPL SPDX marker, and no `Sources/TeleportCore` file
+#     references a host symbol (SSHError, KeychainError, Logger.forCategory,
+#     UserDefaults.standard, AuthMethod, TeleportKeyRing.shared,
+#     app.vivy.vvterm, SessionMutex). Fast; runs on every PR.
+#   - `macos` (macos-26, Xcode 26 / Swift 6.2): `swift test` on macOS arm64 in
+#     Swift 6 language mode, plus an iOS-simulator `xcodebuild build` (build
+#     only — `swift test` already runs the suite).
+#
+# The two job names (`headers`, `macos`) are the required status checks added
+# to the `main` ruleset after PR #2 lands the version/release-PR validators
+# (see docs/verification.md).
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  headers:
+    name: headers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Package boundary + license check
+        run: python3 -B scripts/ci/check-package-boundaries.py
+
+  macos:
+    name: macos
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+
+      - name: Test (macOS arm64, Swift 6)
+        run: swift test
+
+      - name: Build (iOS Simulator)
+        run: |
+          xcodebuild build \
+            -scheme swift-teleport \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
