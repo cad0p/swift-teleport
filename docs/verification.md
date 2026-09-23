@@ -31,16 +31,27 @@ check OK, selftest OK, iOS build succeeds.
 
 ## 3. Independent-review protocol
 
-Every non-trivial change gets at least one review lens before merge:
+Every non-trivial change gets at least one review lens before merge. The lens
+set is phase-aware:
 
-- **Architecture lens** — ownership boundaries (`Domain` / `Application` /
-  `Infrastructure`), the public-seam surface, the Swift 6 isolation story.
-- **Behavior lens** — does the change preserve the ported behavior? For
-  security-relevant paths (TLS verification, host-cert verification, cert
-  expiry), check the fail-closed paths and the fixtures that pin them.
+- **Migration phase** (code still being ported/imported from the host):
+  **architecture** (ownership boundaries, public-seam surface, Swift 6
+  isolation), **behavior/parity** (does the change preserve the ported
+  behavior against the host implementation?), and **packaging** (provenance,
+  licensing, boundary gates).
+- **Post-migration** (the package is the source of truth): the
+  behavior/parity lens retires — there is no host implementation left to
+  compare against, and the ported suites and fixtures are the behavior
+  oracle. Its security-relevant half becomes the first-class **security
+  lens**: trust chain (TLS anchors/ALPN/hostname), host-certificate
+  verification, the WebAuthn/SEP ceremony, key custody, fail-closed paths,
+  and log redaction — reviewed against the fixtures that pin them. The lens
+  set is **architecture + security + packaging**.
 
-Findings are fixed in follow-up commits on the same branch; the PR description
-records the rounds.
+This file is living: a change that alters a gate (a new suite, a new
+fail-closed path, a new job) updates the corresponding section in the same PR,
+and the reviewer checks the PR's evidence against it. Findings are fixed in
+follow-up commits on the same branch; the PR description records the rounds.
 
 ## 4. Live-proof checklist per change type
 
