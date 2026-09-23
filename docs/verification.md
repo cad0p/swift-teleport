@@ -9,10 +9,11 @@ gate that exercises the change; report the exact commands and results.
 | --- | --- | --- |
 | `headers` | ubuntu | No tracked file carries the AGPL SPDX marker; no `Sources/TeleportCore` file references a host symbol (`SSHError`, `KeychainError`, `Logger.forCategory`, `UserDefaults.standard`, `AuthMethod`, `TeleportKeyRing.shared`, `app.vivy.vvterm`, `SessionMutex`) |
 | `macos` | macos-26 | `swift build` + `swift test` pass on macOS arm64 in Swift 6 language mode; the iOS-simulator `xcodebuild build` succeeds |
+| `validate-package-version` | ubuntu | the `package.json` version bump matches the change class (semver-calver) |
+| `validate-release-pr` | ubuntu | a `release/from-v*` PR bumps the version from the last released base; non-release branches skip |
 
-Both jobs must be green on the PR head. After PR #2 adds
-`validate-package-version` / `validate-release-pr`, those become required on
-the `main` ruleset too.
+All four jobs must be green on the PR head and are required on the `main`
+ruleset.
 
 ## 2. Offline gates (run before pushing)
 
