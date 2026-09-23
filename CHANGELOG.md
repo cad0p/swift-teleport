@@ -2,8 +2,6 @@
 
 All notable changes to `swift-teleport` are documented in this file.
 
-## [Unreleased]
-
 ## [0.1.0] - 2026-09-23
 
 <!-- USER-EDITABLE SECTION START -->

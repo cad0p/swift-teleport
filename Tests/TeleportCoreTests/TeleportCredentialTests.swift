@@ -16,7 +16,7 @@
 //    - VVTerm/Features/Teleport/Domain/TeleportCredential.swift
 //
 
-import XCTest
+@preconcurrency import XCTest
 @testable import TeleportCore
 
 // `nonisolated`: `XCTestCase`'s inherited initializers are nonisolated, so the

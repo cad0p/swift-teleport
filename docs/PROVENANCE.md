@@ -57,8 +57,8 @@ that will import the package in Phase 2:
 criterion**: its only consumers are the deferred login/registration
 coordinators (and its own test), with no host-side Phase-2 consumer. It is
 therefore deferred, making the skeleton **18 files**. This is the plan's
-explicit "or 18 if `TeleportWebAuthnRPID` fails the inclusion criterion"
-branch.
+W4 inclusion criterion applied as written — it defers any file whose only
+consumers are deferred.
 
 ## Deferred set (25 files)
 

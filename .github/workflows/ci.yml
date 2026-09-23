@@ -52,9 +52,6 @@ jobs:
           swift --version
           xcodebuild -version
 
-      - name: Build (macOS arm64, Swift 6)
-        run: swift build
-
       - name: Test (macOS arm64, Swift 6)
         run: swift test
 
