@@ -179,6 +179,22 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         public let clusterCAPEMs: [String]
         /// The cert's ValidBefore (parsed from the cert or the server response).
         public let certValidBefore: Date
+
+        public init(
+            sshCertPEM: String,
+            tlsCertPEM: String,
+            tlsKeyPairPrivateKey: SecKey,
+            clusterName: String,
+            clusterCAPEMs: [String],
+            certValidBefore: Date
+        ) {
+            self.sshCertPEM = sshCertPEM
+            self.tlsCertPEM = tlsCertPEM
+            self.tlsKeyPairPrivateKey = tlsKeyPairPrivateKey
+            self.clusterName = clusterName
+            self.clusterCAPEMs = clusterCAPEMs
+            self.certValidBefore = certValidBefore
+        }
     }
 
     public init(

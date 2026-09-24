@@ -22,6 +22,7 @@ let package = Package(
     products: [
         .library(name: "TeleportCore", targets: ["TeleportCore"]),
         .library(name: "TeleportAuth", targets: ["TeleportAuth"]),
+        .library(name: "TeleportTesting", targets: ["TeleportTesting"]),
     ],
     dependencies: [
         // Floors are at/below the host's resolved set (D7): the host app
@@ -58,6 +59,11 @@ let package = Package(
             resources: [.process("PrivacyInfo.xcprivacy")],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
+        .target(
+            name: "TeleportTesting",
+            dependencies: ["TeleportCore", "TeleportAuth"],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
+        ),
         .testTarget(
             name: "TeleportCoreTests",
             dependencies: ["TeleportCore"],
@@ -69,7 +75,7 @@ let package = Package(
         ),
         .testTarget(
             name: "TeleportCoreConsumerTests",
-            dependencies: ["TeleportCore"],
+            dependencies: ["TeleportCore", "TeleportAuth", "TeleportTesting"],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
     ],
