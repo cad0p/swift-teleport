@@ -1,5 +1,11 @@
 title = "swift-teleport Gitleaks Config"
 
+# Mirrors the host repo's config. Consumed by the gitleaks CLI (local runs and
+# any scanner configured outside this repo); this repo's *enforced* secret gate
+# is GitHub secret scanning + push protection. The allowlist is deliberately
+# path-anchored to the test fixture directory: it cannot mask a finding
+# elsewhere, and a crafted path cannot widen it.
+
 [extend]
 useDefault = true
 

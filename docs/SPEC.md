@@ -26,7 +26,7 @@ machinery, with no dependency on an app's UI, storage, or networking stack:
 | --- | --- |
 | `TeleportCore` | domain + transports + gRPC/protobuf + WebAuthn/SEP + wire types + seam protocols |
 | `TeleportAuth` | coordinators + keyring + web-api HTTP client |
-| `TeleportTesting` | the 7 scripted mocks (`MockSEPKeySigner`, `MockTeleport*`, `MockWebAuthenticationSessionPresenter`) |
+| `TeleportTesting` | the 7 scripted mocks (`MockSEPKeySigner`, `MockTeleport*`, `MockWebAuthenticationSessionPresenter`) + the `SoftwareSigner` software P-256 test double |
 
 Dependency edges: `TeleportTesting → TeleportAuth → TeleportCore`. No
 `TeleportCore` file names an `TeleportAuth` symbol (verified per commit by
@@ -35,8 +35,8 @@ Dependency edges: `TeleportTesting → TeleportAuth → TeleportCore`. No
 ## Scope of v0.2.0
 
 `v0.2.0` ships the full client product set D5 describes: the 18-file v0.1.0
-skeleton plus the 25 deferred files, the 7 mocks, the committed
-`iotest_mfa.pb.swift`, the `iotest_mfa.proto` IDL, and the proto
+skeleton plus the 25 deferred files, the 7 mocks + the software signer, the
+committed `iotest_mfa.pb.swift`, the `iotest_mfa.proto` IDL, and the proto
 regeneration script.
 
 Out of scope (host-side by design): the libssh2 channel bridge
