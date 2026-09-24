@@ -8,7 +8,7 @@ gate that exercises the change; report the exact commands and results.
 | Check | Job | Green means |
 | --- | --- | --- |
 | `headers` | ubuntu | No tracked file carries the AGPL SPDX marker; no `Sources/` file (every target) references a host symbol (`SSHError`, `KeychainError`, `Logger.forCategory`, `UserDefaults.standard`, `AuthMethod`, `TeleportKeyRing.shared`, `app.vivy.vvterm`, `SessionMutex`, `TeleportKeyRingStoring`) |
-| `macos` | macos-26 | `swift test` (which builds the package) passes on macOS arm64 in Swift 6 language mode; the iOS-simulator `xcodebuild build` succeeds; the cross-package host-surface fixture (`Fixtures/HostSurfaceCheck`) builds |
+| `macos` | macos-26 | `swift test` (which builds the package) passes on macOS arm64 in Swift 6 language mode; the iOS-simulator `xcodebuild build` succeeds; the cross-package host-surface fixture (`Fixtures/HostSurfaceCheck`) builds in **debug and release** |
 | `validate-package-version` | ubuntu | the `package.json` version bump matches the change class (semver-calver) |
 | `validate-release-pr` | ubuntu | a `release/from-v*` PR bumps the version from the last released base; non-release branches skip |
 
@@ -22,6 +22,7 @@ swift build
 swift build -c release          # proves TeleportTesting builds without #if DEBUG
 swift test
 swift build --package-path Fixtures/HostSurfaceCheck   # cross-package public-surface gate
+swift build -c release --package-path Fixtures/HostSurfaceCheck  # release surface (the host ships release)
 python3 -B scripts/ci/check-package-boundaries.py
 python3 -B scripts/ci/check-package-boundaries.py --selftest
 xcodebuild build -scheme swift-teleport-Package \
@@ -62,7 +63,9 @@ follow-up commits on the same branch; the PR description records the rounds.
 ### Package source change
 - `swift test` green; the boundary check green.
 - If a public signature changed: `swift build --package-path Fixtures/HostSurfaceCheck`
-  still compiles. That fixture is a **separate package** that path-depends on
+  still compiles — in **both** configurations (`-c release` too, because the
+  host app ships the package in release and a symbol that is `public` only
+  under `#if DEBUG` would pass the debug build). That fixture is a **separate package** that path-depends on
   this one, so it sees only `public` — exactly what the Phase 2 host (also a
   different package) sees. The in-package `TeleportCoreConsumerTests`
   (`PublicSeamSmokeTests`) is a non-`@testable` smoke test of the public seam,

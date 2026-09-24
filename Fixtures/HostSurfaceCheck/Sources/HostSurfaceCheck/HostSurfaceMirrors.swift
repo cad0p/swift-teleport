@@ -526,7 +526,14 @@ enum HostSSHClientMirror {
         _ = GRPCClientIdentity.isLiveLabel("x")
         GRPCClientIdentity.registerLiveLabel("x")
         GRPCClientIdentity.unregisterLiveLabel("x")
+        #if DEBUG
+        // Debug-only test seam (the host's tests call it; the host's release
+        // build does not). Guarded so this package still compiles in release —
+        // CI builds both configurations, which is what makes a symbol that is
+        // `public` only under `#if DEBUG` fail here instead of in the host's
+        // TestFlight build.
         GRPCClientIdentity.resetSweepGateForTesting()
+        #endif
     }
 }
 
@@ -588,6 +595,17 @@ enum HostD6SeamMirror {
     /// lines (and read `.blob`) to verify host keys.
     static func authorizedKeysParsing(line: String) -> Data? {
         OpenSSHCertificate.parseAuthorizedKeysLine(line)?.blob
+    }
+
+    /// The kept host suite `TeleportHostKeyPersistenceTests` reads the
+    /// `login/finish` host-signer fields when it refreshes the pinned Host CA
+    /// keys (additions-only).
+    static func loginFinishHostSignerShape() -> (domainName: String, checkingKeys: [String]) {
+        let signer = LoginFinishResponse.HostSigner(
+            domainName: "teleport.pcad.it",
+            checkingKeys: []
+        )
+        return (signer.domainName, signer.checkingKeys)
     }
 
     /// The host constructs `BootstrapResult` in its composition and UI-test
