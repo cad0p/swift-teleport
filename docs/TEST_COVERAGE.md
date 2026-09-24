@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **322 tests** across two frameworks and three targets:
+`swift test` runs **332 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
 | `TeleportCoreTests` | Swift Testing | 6 | 116 |
 | `TeleportCoreTests` | XCTest | 5 | 72 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
-| `TeleportPackageTests` | Swift Testing | 4 | 27 |
+| `TeleportPackageTests` | Swift Testing | 5 | 37 |
 | `TeleportPackageTests` | XCTest | 11 | 100 |
-| **Total** | | | **322** |
+| **Total** | | | **332** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -27,6 +27,7 @@
 | `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) |
 | `TeleportTLSTrustTests` | Swift Testing | `TeleportTLSTrust` (chain/name/EKU/ALPN + DER fail-closed matrix) |
 | `TeleportIssuedCertValidatorTests` | Swift Testing | issued-cert binding checks (11) |
+| `TeleportCertBindingCoordinatorTests` | Swift Testing | the coordinators store nothing on a cert/key mismatch (10) |
 | `TeleportWebAuthnRPIDTests` | Swift Testing | rpID resolution through the login coordinator (8) |
 | `FixtureTests` | XCTest | the 8 committed Go SEP fixtures, byte-compared (8) |
 | `BrowserMFAListenerLoopbackTests` | XCTest | the loopback HTTP contract (27) |

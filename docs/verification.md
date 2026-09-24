@@ -8,7 +8,7 @@ gate that exercises the change; report the exact commands and results.
 | Check | Job | Green means |
 | --- | --- | --- |
 | `headers` | ubuntu | No tracked file carries the AGPL SPDX marker; no `Sources/` file (every target) references a host symbol (`SSHError`, `KeychainError`, `Logger.forCategory`, `UserDefaults.standard`, `AuthMethod`, `TeleportKeyRing.shared`, `app.vivy.vvterm`, `SessionMutex`, `TeleportKeyRingStoring`) |
-| `macos` | macos-26 | `swift build` + `swift test` pass on macOS arm64 in Swift 6 language mode; the iOS-simulator `xcodebuild build` succeeds; the cross-package host-surface fixture (`Fixtures/HostSurfaceCheck`) builds |
+| `macos` | macos-26 | `swift test` (which builds the package) passes on macOS arm64 in Swift 6 language mode; the iOS-simulator `xcodebuild build` succeeds; the cross-package host-surface fixture (`Fixtures/HostSurfaceCheck`) builds |
 | `validate-package-version` | ubuntu | the `package.json` version bump matches the change class (semver-calver) |
 | `validate-release-pr` | ubuntu | a `release/from-v*` PR bumps the version from the last released base; non-release branches skip |
 
@@ -28,7 +28,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **322 tests** pass (172 XCTest + 150
+Expected: build clean (no warnings), **332 tests** pass (172 XCTest + 160
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds.
