@@ -28,7 +28,7 @@ import Foundation
 import CryptoKit
 import Security
 
-enum OpenSSHHostCertVerification: Equatable {
+public enum OpenSSHHostCertVerification: Equatable {
     /// The host certificate chains to a pinned Host CA key and is valid.
     case verified
     /// The blob is not an OpenSSH host certificate (plain host key, user
@@ -46,11 +46,11 @@ enum OpenSSHHostCertVerification: Equatable {
     case unsupportedCAKeyType(String)
 }
 
-enum OpenSSHHostCertVerifier {
+public enum OpenSSHHostCertVerifier {
 
     /// Verify a host key blob (as returned by `libssh2_session_hostkey`)
     /// against the pinned Host CA checking keys.
-    static func verify(
+    public static func verify(
         hostKeyBlob: Data,
         expectedPrincipals: [String],
         checkingKeys: [String],

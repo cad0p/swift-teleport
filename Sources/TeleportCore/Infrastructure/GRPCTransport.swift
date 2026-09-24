@@ -33,13 +33,13 @@ import os.log
 ///
 /// Per-connect identities must not accumulate in the keychain: the connection
 /// deletes its items in `close()` and on every failure path.
-struct GRPCClientIdentity {
-    let identity: sec_identity_t
-    let label: String
+public struct GRPCClientIdentity {
+    public let identity: sec_identity_t
+    public let label: String
 
     /// The shared prefix for per-connect identity labels: used when creating
     /// labels and when sweeping leftovers at startup.
-    static let labelPrefix = "vvterm-grpc-"
+    public static let labelPrefix = "vvterm-grpc-"
 
     private static let registryLock = NSLock()
     /// Labels whose cert/key items belong to an in-flight connection. The
@@ -55,7 +55,7 @@ struct GRPCClientIdentity {
     /// the startup sweep can age-gate leftovers from a crashed process: a
     /// second process must never delete another process's in-flight identity
     /// (macOS can run a debug and a release instance at once).
-    static func makeLabel(now: Date = Date()) -> String {
+    public static func makeLabel(now: Date = Date()) -> String {
         let millis = Int64((now.timeIntervalSince1970 * 1000).rounded())
         return "\(labelPrefix)\(millis)-\(UUID().uuidString)"
     }
@@ -65,11 +65,11 @@ struct GRPCClientIdentity {
     /// call; a label younger than this window may still belong to another
     /// live process, so the sweep skips it. Legacy labels without an
     /// embedded timestamp are treated as stale (they predate this scheme).
-    static let staleIdentityAge: TimeInterval = 30 * 60
+    public static let staleIdentityAge: TimeInterval = 30 * 60
 
     /// The creation instant embedded in a label, or nil when the label has
     /// no timestamp (legacy) or is malformed.
-    static func timestamp(inLabel label: String) -> Date? {
+    public static func timestamp(inLabel label: String) -> Date? {
         guard label.hasPrefix(labelPrefix) else { return nil }
         let remainder = label.dropFirst(labelPrefix.count)
         guard let separator = remainder.firstIndex(of: "-"),
@@ -81,31 +81,31 @@ struct GRPCClientIdentity {
 
     /// Claim a label before its items are written, so a concurrent sweep
     /// cannot delete them while the identity is being built.
-    static func registerLiveLabel(_ label: String) {
+    public static func registerLiveLabel(_ label: String) {
         registryLock.lock()
         liveLabels.insert(label)
         registryLock.unlock()
     }
 
-    static func unregisterLiveLabel(_ label: String) {
+    public static func unregisterLiveLabel(_ label: String) {
         registryLock.lock()
         liveLabels.remove(label)
         registryLock.unlock()
     }
 
-    static func isLiveLabel(_ label: String) -> Bool {
+    public static func isLiveLabel(_ label: String) -> Bool {
         registryLock.lock()
         defer { registryLock.unlock() }
         return liveLabels.contains(label)
     }
 
-    func deleteKeychainItems(logger: Logger) {
+    public func deleteKeychainItems(logger: Logger) {
         Self.deleteKeychainItems(label: label, logger: logger)
     }
 
     /// Delete the cert + key items with the given label. Safe to call when
     /// the items are absent (returns `errSecItemNotFound`).
-    static func deleteKeychainItems(label: String, logger: Logger) {
+    public static func deleteKeychainItems(label: String, logger: Logger) {
         unregisterLiveLabel(label)
         SecItemDelete([
             kSecClass as String: kSecClassCertificate,
@@ -137,7 +137,7 @@ struct GRPCClientIdentity {
     ///
     /// - Returns: `true` when this call attempted the sweep.
     @discardableResult
-    static func deleteStaleIdentities(logger: Logger) -> Bool {
+    public static func deleteStaleIdentities(logger: Logger) -> Bool {
         sweepStaleIdentities(force: false, logger: logger)
     }
 
@@ -145,7 +145,7 @@ struct GRPCClientIdentity {
     /// Test-only variant that bypasses the once-per-process gate. Not
     /// compiled into release builds, so production cannot defeat the gate.
     @discardableResult
-    static func deleteStaleIdentitiesForTesting(logger: Logger) -> Bool {
+    public static func deleteStaleIdentitiesForTesting(logger: Logger) -> Bool {
         sweepStaleIdentities(force: true, logger: logger)
     }
 
@@ -155,7 +155,7 @@ struct GRPCClientIdentity {
 
     /// Test seam: clears the once-per-process gate so the retry behavior can
     /// be exercised deterministically.
-    static func resetSweepGateForTesting() {
+    public static func resetSweepGateForTesting() {
         registryLock.lock()
         hasSweptStaleIdentities = false
         registryLock.unlock()
@@ -223,7 +223,7 @@ struct GRPCClientIdentity {
     }
 }
 
-enum GRPCTLSOptions {
+public enum GRPCTLSOptions {
 
     /// Build NWProtocolTLS.Options for dialing the Teleport AUTH service via
     /// the ALPN SNI auth route.
@@ -246,9 +246,9 @@ enum GRPCTLSOptions {
     /// only the returned handle can delete them, so this function must not
     /// throw after the identity has been built (nothing below the builder
     /// call throws).
-    typealias IdentityBuilder = (String, SecKey, Logger) throws -> GRPCClientIdentity
+    public typealias IdentityBuilder = (String, SecKey, Logger) throws -> GRPCClientIdentity
 
-    static func make(clientCertPEM: String,
+    public static func make(clientCertPEM: String,
                      privateKey: SecKey,
                      clusterName: String,
                      clusterCAPEMs: [String],
@@ -330,7 +330,7 @@ enum GRPCTLSOptions {
     ///
     /// The returned handle owns the keychain items: `TeleportGRPCConnection`
     /// calls `deleteKeychainItems()` on close and on every failure path.
-    static func buildSecIdentity(certPEM: String, privateKey: SecKey, logger: Logger) throws -> GRPCClientIdentity {
+    public static func buildSecIdentity(certPEM: String, privateKey: SecKey, logger: Logger) throws -> GRPCClientIdentity {
         // 1. Parse cert.
         let certDER = try TeleportTLSTrust.pemToDER(pem: certPEM, label: "CERTIFICATE")
         guard let cert = SecCertificateCreateWithData(nil, certDER as CFData) else {
@@ -394,7 +394,7 @@ enum GRPCTLSOptions {
 /// An established HTTP/2 connection to the Teleport proxy gRPC mTLS endpoint.
 ///
 /// Created with a Phase 1 TLS cert. Use `unary(...)` to make gRPC calls.
-final class TeleportGRPCConnection: @unchecked Sendable {
+public final class TeleportGRPCConnection: @unchecked Sendable {
     private let channel: Channel
     private let multiplexer: NIOHTTP2Handler.StreamMultiplexer
     private let authority: String
@@ -424,7 +424,7 @@ final class TeleportGRPCConnection: @unchecked Sendable {
     ///   - clientCertPEM: PEM TLS cert (Phase 1 tls_cert)
     ///   - privateKey: SecKey for the private key
     /// - Returns: a connected TeleportGRPCConnection.
-    static func connect(host: String,
+    public static func connect(host: String,
                         port: Int = 443,
                         clientCertPEM: String,
                         privateKey: SecKey,
@@ -489,7 +489,7 @@ final class TeleportGRPCConnection: @unchecked Sendable {
     ///   - request: the protobuf request message
     ///   - responseType: the protobuf response message type
     /// - Returns: the decoded response.
-    func unary<R: SwiftProtobuf.Message, S: SwiftProtobuf.Message>(
+    public func unary<R: SwiftProtobuf.Message, S: SwiftProtobuf.Message>(
         path: String, request: R, responseType: S.Type
     ) async throws -> S {
         try await grpcUnaryCallTyped(
@@ -501,7 +501,7 @@ final class TeleportGRPCConnection: @unchecked Sendable {
         )
     }
 
-    func close() async throws {
+    public func close() async throws {
         // Delete the per-connect keychain identity even if the graceful
         // channel shutdown fails.
         defer { identity.deleteKeychainItems(logger: logger) }
@@ -513,7 +513,7 @@ final class TeleportGRPCConnection: @unchecked Sendable {
     /// asynchronous channel teardown. `close()` is the normal path; this
     /// bounds the leak when the owning client is deallocated without
     /// `disconnect()`. Safe to call more than once.
-    func deleteKeychainIdentity() {
+    public func deleteKeychainIdentity() {
         identity.deleteKeychainItems(logger: logger)
     }
 }

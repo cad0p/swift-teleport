@@ -15,16 +15,16 @@
 
 import Foundation
 
-struct TeleportKeychainConfig: @unchecked Sendable {
+public struct TeleportKeychainConfig: @unchecked Sendable {
     /// The keychain service used for the per-cluster ed25519 private key.
-    let keychainService: String
+    public let keychainService: String
 
     /// The defaults store holding the credential metadata + cluster TLS
     /// state. `UserDefaults` is thread-safe, hence the `@unchecked Sendable`
     /// on this config.
-    let defaults: UserDefaults
+    public let defaults: UserDefaults
 
-    init(keychainService: String, defaults: UserDefaults) {
+    public init(keychainService: String, defaults: UserDefaults) {
         self.keychainService = keychainService
         self.defaults = defaults
     }

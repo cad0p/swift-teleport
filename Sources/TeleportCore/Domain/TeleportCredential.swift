@@ -3,29 +3,29 @@ import Foundation
 /// The persisted state for a registered Teleport SEP key + its derived cert.
 /// Stored in the keychain (SEP key) and UserDefaults/TeleportKeyRing (cert + metadata).
 /// NOT CloudKit-synced — the SEP key is per-device by design.
-struct TeleportCredential: Codable, Hashable, Identifiable {
-    let id: UUID
+public struct TeleportCredential: Codable, Hashable, Identifiable {
+    public let id: UUID
     /// The cluster this credential belongs to.
-    var clusterId: UUID
+    public var clusterId: UUID
     /// The WebAuthn credential ID (raw bytes, base64-encoded for storage).
-    var credentialID: String
+    public var credentialID: String
     /// The WebAuthn user handle (raw bytes, base64-encoded). Required for
     /// passwordless login (server's verify path needs it). Captured at Phase 2
     /// registration, decoded as UTF-8 (NOT base64url — see the 2.2 prompt gotcha).
-    var userHandle: String
+    public var userHandle: String
     /// The SEP key's public key in raw form (for attestation/verification).
-    var publicKeyRaw: String
+    public var publicKeyRaw: String
     /// The MFA device name registered with Teleport (e.g. "vvterm-pier-iphone").
-    var deviceName: String
+    public var deviceName: String
     /// The issued SSH certificate (PEM). nil if no live cert.
-    var sshCertPEM: String?
+    public var sshCertPEM: String?
     /// The ed25519 private key for the cert (PEM). nil if no live cert.
     /// Stored in keychain, not here — this is just a flag for "cert present".
-    var hasLiveCert: Bool
+    public var hasLiveCert: Bool
     /// The cert's ValidBefore (Unix timestamp). 0 if no cert.
-    var certValidBefore: Date
+    public var certValidBefore: Date
 
-    init(
+    public init(
         id: UUID = UUID(),
         clusterId: UUID,
         credentialID: String,
@@ -48,7 +48,7 @@ struct TeleportCredential: Codable, Hashable, Identifiable {
     }
 
     /// Whether the cert is currently valid (present and not expired).
-    var isCertValid: Bool {
+    public var isCertValid: Bool {
         hasLiveCert && sshCertPEM != nil && Date() < certValidBefore
     }
 }

@@ -28,7 +28,7 @@ import Foundation
 
 // MARK: - Errors
 
-enum GRPCError: Error, CustomStringConvertible, LocalizedError {
+public enum GRPCError: Error, CustomStringConvertible, LocalizedError {
     case transport(String)
     case tls(String)
     case http2(String)
@@ -36,7 +36,7 @@ enum GRPCError: Error, CustomStringConvertible, LocalizedError {
     case decode(String)
     case timeout
 
-    var description: String {
+    public var description: String {
         switch self {
         case .transport(let m):   return "transport: \(m)"
         case .tls(let m):         return "tls: \(m)"
@@ -53,8 +53,8 @@ enum GRPCError: Error, CustomStringConvertible, LocalizedError {
     // "The operation couldn't be completed. (VVTerm.GRPCError error 1.)".
     // Without this, a Phase-2 gRPC dial failure reports only the case ordinal,
     // hiding the real NWError/TLS error from the device log.
-    var errorDescription: String? { description }
-    var failureReason: String? {
+    public var errorDescription: String? { description }
+    public var failureReason: String? {
         switch self {
         case .transport(let m):   return m
         case .tls(let m):         return m

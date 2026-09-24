@@ -40,62 +40,62 @@
 import Foundation
 
 /// A parsed OpenSSH SSH certificate.
-struct OpenSSHCertificate: Equatable, Sendable {
+public struct OpenSSHCertificate: Equatable, Sendable {
 
     /// The certificate type field: 1 = user certificate, 2 = host certificate.
-    enum CertType: UInt32, Sendable, Equatable {
+    public enum CertType: UInt32, Sendable, Equatable {
         case user = 1
         case host = 2
     }
 
     /// The full certificate key type, e.g.
     /// `ssh-ed25519-cert-v01@openssh.com`.
-    let certKeyType: String
+    public let certKeyType: String
     /// The certificate nonce.
-    let nonce: Data
+    public let nonce: Data
     /// The certified public key as a plain OpenSSH key blob
     /// (`ssh-ed25519 <pubkey>`, `ecdsa-sha2-nistp256 <curve> <Q>`,
     /// `ssh-rsa <e> <n>`) — the same bytes as the second field of an
     /// authorized_keys line, so it can be compared byte-for-byte with the
     /// key the client generated.
-    let publicKeyBlob: Data
-    let serial: UInt64
-    let certType: CertType
-    let keyID: String
+    public let publicKeyBlob: Data
+    public let serial: UInt64
+    public let certType: CertType
+    public let keyID: String
     /// The certificate principals. Empty when the cert carries no principals.
-    let validPrincipals: [String]
+    public let validPrincipals: [String]
     /// Unix timestamp (seconds).
-    let validAfter: UInt64
+    public let validAfter: UInt64
     /// Unix timestamp (seconds). 0 means "no expiry".
-    let validBefore: UInt64
+    public let validBefore: UInt64
     /// Raw `critical options` payload (encoded name/data tuples).
-    let criticalOptions: Data
+    public let criticalOptions: Data
     /// Raw `extensions` payload (encoded name/data tuples).
-    let extensions: Data
+    public let extensions: Data
     /// The reserved field (empty in practice).
-    let reserved: Data
+    public let reserved: Data
     /// The CA public key blob (the `signature key` field).
-    let signatureKeyBlob: Data
+    public let signatureKeyBlob: Data
     /// The CA signature blob (the `signature` field).
-    let signatureBlob: Data
+    public let signatureBlob: Data
     /// The bytes covered by the CA signature: the certificate blob up to (but
     /// excluding) the `signature` field's length prefix.
-    let signedData: Data
+    public let signedData: Data
 
     /// `validAfter` as a `Date`.
-    var validAfterDate: Date {
+    public var validAfterDate: Date {
         Date(timeIntervalSince1970: TimeInterval(validAfter))
     }
 
     /// `validBefore` as a `Date`; `.distantFuture` when the cert has no
     /// expiry (`validBefore == 0`).
-    var validBeforeDate: Date {
+    public var validBeforeDate: Date {
         validBefore == 0 ? .distantFuture : Date(timeIntervalSince1970: TimeInterval(validBefore))
     }
 
     /// Whether the certificate is currently within its validity window,
     /// optionally tolerating clock skew on both ends.
-    func isValid(at date: Date, clockSkew: TimeInterval = 0) -> Bool {
+    public func isValid(at date: Date, clockSkew: TimeInterval = 0) -> Bool {
         let after = validAfterDate.addingTimeInterval(-clockSkew)
         guard date >= after else { return false }
         if validBefore == 0 { return true }
@@ -106,7 +106,7 @@ struct OpenSSHCertificate: Equatable, Sendable {
 
     /// Parse a certificate from either an authorized_keys-style line, a PEM
     /// block (`-----BEGIN SSH CERTIFICATE-----`), or a bare base64 blob.
-    static func parse(authorizedKeysOrPEM input: String) -> OpenSSHCertificate? {
+    public static func parse(authorizedKeysOrPEM input: String) -> OpenSSHCertificate? {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -135,7 +135,7 @@ struct OpenSSHCertificate: Equatable, Sendable {
     /// decoded key blob. Handles leading options and the `@cert-authority`
     /// known_hosts marker by scanning for the first field that looks like an
     /// SSH key type.
-    static func parseAuthorizedKeysLine(_ line: String) -> (keyType: String, blob: Data)? {
+    public static func parseAuthorizedKeysLine(_ line: String) -> (keyType: String, blob: Data)? {
         let fields = line
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .split(whereSeparator: { $0 == " " || $0 == "\t" })
@@ -152,7 +152,7 @@ struct OpenSSHCertificate: Equatable, Sendable {
     }
 
     /// Parse a certificate from its decoded wire blob.
-    static func parse(blob: Data) -> OpenSSHCertificate? {
+    public static func parse(blob: Data) -> OpenSSHCertificate? {
         var reader = BlobReader(data: blob)
 
         // 1. cert key type — must be a `-cert-v01@openssh.com` type.

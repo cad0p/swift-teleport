@@ -79,11 +79,11 @@ public enum TeleportHostKeyUpdateResult: Equatable {
 /// `checking_keys` elements are base64 of an *authorized_keys line*
 /// (`ssh-ed25519 AAAA… type=host`), not base64(PEM). Shared by the headless
 /// + login wire decoding and the bootstrap coordinator.
-enum TeleportHostCACheckingKeysDecoder {
+public enum TeleportHostCACheckingKeysDecoder {
 
     /// Decode one `checking_keys` element. Returns nil when the value is not
     /// a base64-authorized_keys line.
-    static func decode(_ base64Value: String) -> String? {
+    public static func decode(_ base64Value: String) -> String? {
         guard let data = Data(base64Encoded: base64Value),
               let line = String(data: data, encoding: .utf8) else {
             return nil
@@ -94,14 +94,14 @@ enum TeleportHostCACheckingKeysDecoder {
     }
 
     /// Decode every element, dropping malformed entries.
-    static func decodeAll(_ base64Values: [String]) -> [String] {
+    public static func decodeAll(_ base64Values: [String]) -> [String] {
         base64Values.compactMap(decode)
     }
 
     /// Normalize authorized_keys lines to their parsed key blobs, preserving
     /// the first line seen for each blob (comments may differ across
     /// responses but the key material is what matters).
-    static func normalizedLines(_ lines: [String]) -> [String] {
+    public static func normalizedLines(_ lines: [String]) -> [String] {
         var seen = Set<Data>()
         var normalized: [String] = []
         for line in lines {
@@ -131,13 +131,13 @@ enum TeleportHostCACheckingKeysDecoder {
 /// the outer TLS anchors used by `TeleportTLSTrust`. An accepted refresh
 /// therefore only grows the SSH host-cert verifier's pinned key set; it
 /// cannot change the TLS-leg trust anchors that gate every connection.
-enum TeleportHostKeyUpdatePolicy {
+public enum TeleportHostKeyUpdatePolicy {
 
     /// Apply a refresh to a cluster's TLS state.
     ///
     /// - Returns: the outcome plus the state to persist; `updatedState` is nil
     ///   when the current state must be kept unchanged.
-    static func apply(
+    public static func apply(
         checkingKeys: [String],
         to state: TeleportClusterTLSState
     ) -> (result: TeleportHostKeyUpdateResult, updatedState: TeleportClusterTLSState?) {
@@ -168,7 +168,7 @@ enum TeleportHostKeyUpdatePolicy {
     /// the label bound to the pinned key blobs; a missing, empty, or
     /// mismatched name must not trigger a refresh (the pinned anchors stay in
     /// place and readiness surfaces re-bootstrap).
-    static func matchesPinnedCluster(domainName: String?, pinnedClusterName: String?) -> Bool {
+    public static func matchesPinnedCluster(domainName: String?, pinnedClusterName: String?) -> Bool {
         guard let pinned = pinnedClusterName?.trimmingCharacters(in: .whitespacesAndNewlines),
               !pinned.isEmpty else {
             return false
