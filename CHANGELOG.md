@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `swift-teleport` are documented in this file.
+All notable changes to this project will be documented in this file.
 
 ## [0.2.0] - 2026-09-24
 
