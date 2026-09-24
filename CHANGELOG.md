@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 <!-- Add your curated release notes here. -->
 <!-- USER-EDITABLE SECTION END -->
 
+### 🚀 Features
+
+- Import the remaining Teleport client — TeleportCore + TeleportAuth + TeleportTesting (closes #10)
+
 ### 📚 Documentation
 
 - Make the independent-review lenses phase-aware (closes #3)
