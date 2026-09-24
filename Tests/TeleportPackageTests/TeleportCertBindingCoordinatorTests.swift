@@ -30,6 +30,23 @@ import TeleportTesting
 @MainActor
 struct TeleportCertBindingCoordinatorTests {
 
+    /// Fail loud when a fixture this suite reads is missing: `fixtureString`
+    /// returns `""` on a read error, which would make the "same key set"
+    /// assertions pass vacuously.
+    init() throws {
+        for name in [
+            "OpenSSH/ca_ed25519.pub",
+            "OpenSSH/ca_foreign.pub",
+            "OpenSSH/user-cert-ed25519.pub",
+            "OpenSSH/hostkey_ed25519.pub",
+            "OpenSSH/host-cert-ed25519.pub",
+            "loopback-tls/server.pem",
+            "loopback-tls/server-wrongname.pem",
+        ] where TeleportFixtureSupport.fixtureString(name).isEmpty {
+            throw TeleportFixtureSupportError.missingFixture(name)
+        }
+    }
+
     private func makeCluster() -> TeleportCluster {
         TeleportCluster(host: "teleport.pcad.it", username: "pier")
     }

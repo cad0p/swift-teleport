@@ -26,11 +26,11 @@ The import preserves file content except for:
    now `public`/`package` (the package's contract). Model internals stay
    `internal`. Types that cross the module boundary also gained explicit
    initialisers where the implicit memberwise/`init()` was not visible outside
-   the module (`MFALoginWireTypes` ×4, `HeadlessLogin` ×2, `BootstrapResult`,
-   `TLSKeyPair`, three protocol-support classes in
-   `TeleportInfrastructureProtocols`, `MockTeleportKeyRing`'s nested state
-   struct, and two mocks); each was audited to reproduce the suppressed
-   initialiser exactly — same parameter order and types, same defaults.
+   the module — the wire types in `MFALoginWireTypes` and `HeadlessLogin`,
+   `BootstrapResult`, `TLSKeyPair`, three protocol-support classes in
+   `TeleportInfrastructureProtocols`, and the `TeleportTesting` mocks. Each was
+   audited to reproduce the suppressed initialiser exactly — same parameter
+   order and types, same defaults.
 2. **Module imports** — the `TeleportAuth`/`TeleportTesting` files import
    `TeleportCore` (and `TeleportTesting` imports `TeleportAuth`) at the new
    module boundaries.
@@ -145,6 +145,7 @@ byte-reproducible against the committed `.pb.swift`.
 | `BrowserMFAListener` | `nonisolated` + lock-boxed state + `@Sendable` locals | Swift 6 concurrency, rewritten in Stage A |
 | `GRPCTransport`'s captured multiplexer | captured `var` → `NIOLockedValueBox` | the host form was an **unsynchronized** capture across the channel-initializer closure; Swift 6 rejects it, and the lock is strictly safer. Single-writer overwrite semantics are preserved (the direction of the change is safer, not merely diagnostic) |
 | `TeleportTesting` mocks | `@MainActor` class + `@MainActor` isolated conformance | protocol conformances crossing module boundaries |
+| `SoftwareSigner` | `@MainActor` class + `@MainActor` on each conformance | same rule, after the move into `TeleportTesting` (`WebAuthnSigner`/`SEPKeySigning`/`TeleportSEPSigning` are declared in `TeleportCore`) |
 | XCTest suites | `nonisolated final class` + `@MainActor` methods | `XCTestCase`'s inherited initializers are nonisolated |
 
 ## Fixtures

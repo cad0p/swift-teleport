@@ -130,6 +130,10 @@ enum TeleportFixtureSupport {
 
 enum TeleportFixtureSupportError: Error {
     case tlsKeyPairUnavailable
+    /// A fixture the suite depends on is absent or unreadable. Failing loud
+    /// matters because `fixtureString` returns `""` on a read error, and an
+    /// empty expected value can make a "same value" assertion vacuous.
+    case missingFixture(String)
 }
 
 /// Returns a fixed ed25519 public key (the fixture cert's subject key).
