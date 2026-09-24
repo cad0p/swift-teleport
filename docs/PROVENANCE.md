@@ -40,13 +40,15 @@ The import preserves file content except for:
    `TeleportKeyRingStoring` conformance (the host restores it by extension in
    Phase 2), and `MockTeleportHTTPClient`'s `#filePath` fixture coupling is
    replaced by plain scripted scenarios (the fixture-bound payload factories
-   live in the test targets).
+   live in the test targets). `SoftwareSigner` moves from `TeleportCore` to
+   `TeleportTesting` (and `package` → `public`) because its only consumers are
+   test targets.
 
 Nothing else changed.
 
 ## Imported set (v0.2.0 additions: 32 files + proto + script)
 
-### `TeleportCore` additions (20 files + the IDL)
+### `TeleportCore` additions (19 files + the IDL)
 
 | Path | Origin |
 | --- | --- |
@@ -67,7 +69,6 @@ Nothing else changed.
 | `Infrastructure/SEPWebAuthn/Attestation.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
 | `Infrastructure/SEPWebAuthn/WebAuthn.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
 | `Infrastructure/SEPWebAuthn/SecureEnclaveSigner.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
-| `Infrastructure/SEPWebAuthn/SoftwareSigner.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
 | `Application/TeleportInfrastructureProtocols.swift` | `VVTerm/Features/Teleport/Application/` |
 | `Domain/TeleportIssuedCertValidator.swift` | `VVTerm/Features/Teleport/Domain/` |
 | `Domain/TeleportWebAuthnRPID.swift` | `VVTerm/Features/Teleport/Domain/` |
@@ -82,13 +83,24 @@ Nothing else changed.
 | `Application/TeleportKeyRing.swift` | `VVTerm/Features/Teleport/Application/` |
 | `Infrastructure/TeleportHTTPClient.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
 
-### `TeleportTesting` (7 files)
+### `TeleportTesting` (8 files)
 
 `MockSEPKeySigner`, `MockTeleportBootstrapCoordinator`,
 `MockTeleportHTTPClient`, `MockTeleportKeyRing`,
 `MockTeleportLoginCoordinator`, `MockTeleportRegistrationCoordinator`,
 `MockWebAuthenticationSessionPresenter` — all from
 `VVTerm/Features/Teleport/UITesting/`.
+
+| Path | Origin |
+| --- | --- |
+| `SoftwareSigner.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/SoftwareSigner.swift` |
+
+The 8th entry is a deliberate **product move** (not a content change):
+`SoftwareSigner` is a software test double whose only consumers are test
+targets, so it ships in the test-support product as `public` instead of
+`package` inside `TeleportCore`. That is what makes the kept host-side
+`TeleportServerIntegrationTests` (a different package in Phase 2) able to
+construct it. See `docs/API.md` § `TeleportTesting`.
 
 ### Regeneration script
 

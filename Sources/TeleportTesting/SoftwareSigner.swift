@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //
 //  SoftwareSigner.swift
-//  SEPWebAuthn
+//  TeleportTesting
 //
 //  Part A signer — pure software P-256 via SecKey (no Secure Enclave, no
 //  biometry, no codesigning). Runs on any platform with Security (macOS 10.12+,
@@ -16,6 +16,13 @@
 //  passwordless ceremonies against a real Teleport cluster with this signer,
 //  exactly like Teleport's own e2e tests use software WebAuthn keys.
 //
+//  It lives in the `TeleportTesting` product, not `TeleportCore`: its only
+//  consumers are test targets (the package's SEP suites and the host's
+//  kept-side `TeleportServerIntegrationTests`), and a test double has no
+//  place in the shipped core. Shipping it here also means an external test
+//  target can reach it through `public` — a `package`-scoped signer would be
+//  invisible to the Phase 2 host, which is a different package.
+//
 //  Keys are held in-memory in a dictionary keyed by the credential ID
 //  (no persistence — a fresh instance per app run; the test creates one
 //  instance and shares it across the registration + login coordinators).
@@ -26,18 +33,25 @@
 import Foundation
 import Security
 import CryptoKit
+import TeleportCore
 
 /// Software P-256 signer. Holds keys in-memory in a dictionary keyed by the
 /// credential ID. The credential ID is a random 32-byte value generated at
 /// `createKey` time (no persistence — the spike re-creates per run).
-package final class SoftwareSigner: WebAuthnSigner {
+///
+/// `@MainActor` on the class and on each conformance: the conformances cross
+/// a module boundary (`WebAuthnSigner`/`SEPKeySigning` live in
+/// `TeleportCore`), which the Swift 6.2 conformance-isolation check requires
+/// to be actor-isolated explicitly. Same pattern as the 7 mocks.
+@MainActor
+public final class SoftwareSigner: @MainActor WebAuthnSigner {
     // Explicit nonisolated deinit: the compiler-synthesized deinit of a
     // MainActor-isolated class takes the back-deployed isolated-deinit path,
     // which aborts (invalid free) when released outside a task context —
     // swiftlang/swift#85663, #88036. Empty body, no behavior change.
     nonisolated deinit {}
 
-    package let label = "software"
+    public let label = "software"
 
     /// The credential ID → SecKey map (mirrors `SecureEnclaveSigner.keys`).
     /// Populated by `createKey(credentialID:)`; `loadKey` returns the cached
@@ -46,11 +60,11 @@ package final class SoftwareSigner: WebAuthnSigner {
     private var keys: [Data: SecKey] = [:]
     private let queue = DispatchQueue(label: "sep-webauthn.software-signer")
 
-    package init() {}
+    public init() {}
 
     // MARK: - WebAuthnSigner (builder-facing)
 
-    package func createKey() throws -> (credentialID: Data, publicKeyRaw: Data) {
+    public func createKey() throws -> (credentialID: Data, publicKeyRaw: Data) {
         let credentialID = newCredentialID()
         let secKey = try createKey(credentialID: credentialID)
 
@@ -72,7 +86,7 @@ package final class SoftwareSigner: WebAuthnSigner {
         return (credentialID, publicKeyData as Data)
     }
 
-    package func sign(message: Data, credentialID: Data) throws -> Data {
+    public func sign(message: Data, credentialID: Data) throws -> Data {
         // Pre-hash the message with SHA-256, then sign the DIGEST with the
         // *Digest* variant (NOT *Message*). Same convention as
         // `SecureEnclaveSigner` — the server computes sha256(message) once
@@ -88,8 +102,8 @@ package final class SoftwareSigner: WebAuthnSigner {
 
 // MARK: - SEPKeySigning
 
-extension SoftwareSigner: SEPKeySigning {
-    package func createKey(credentialID: Data) throws -> SecKey {
+extension SoftwareSigner: @MainActor SEPKeySigning {
+    public func createKey(credentialID: Data) throws -> SecKey {
         // A plain software EC P-256 key: no kSecAttrTokenIDSecureEnclave
         // (the Secure Enclave is absent on simulators and Linux CI), no
         // .biometryAny access control (no Face ID prompt). This mirrors the
@@ -113,13 +127,13 @@ extension SoftwareSigner: SEPKeySigning {
         return privateKey
     }
 
-    package func loadKey(credentialID: Data) throws -> SecKey? {
+    public func loadKey(credentialID: Data) throws -> SecKey? {
         // In-memory lookup: nil for "never created in this instance" —
         // mirrors the real signer's errSecItemNotFound → nil behavior.
         queue.sync { keys[credentialID] }
     }
 
-    package func sign(digest: Data, with key: SecKey) throws -> Data {
+    public func sign(digest: Data, with key: SecKey) throws -> Data {
         var error: Unmanaged<CFError>?
         guard let signature = SecKeyCreateSignature(
             key,
@@ -138,4 +152,4 @@ extension SoftwareSigner: SEPKeySigning {
 
 // MARK: - TeleportSEPSigning
 
-extension SoftwareSigner: TeleportSEPSigning {}
+extension SoftwareSigner: @MainActor TeleportSEPSigning {}

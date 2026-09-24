@@ -122,12 +122,12 @@ package enum SSHPubKey { … }
 package func makeAttestationData(…) throws -> AttestationData
 package func coseEC2PublicKeyCBOR(publicKeyRaw:) throws -> Data
 package enum WebAuthn { package static func register(…)/login(…) }
-package final class SoftwareSigner: WebAuthnSigner { … }
 ```
 
-Note: the host-side `TeleportServerIntegrationTests` (kept host-side) builds a
-`SoftwareSigner` today; Phase 2 either injects a `TeleportTesting` mock there
-or promotes `SoftwareSigner` into `TeleportTesting`.
+The software P-256 signer is **not** in this list: `SoftwareSigner` ships in
+**`TeleportTesting`** as a `public` test double, so an external test target —
+the host-side `TeleportServerIntegrationTests` that constructs it today, and
+the Phase 2 host generally — can inject it without `package` access.
 
 ## `TeleportAuth`
 
@@ -166,6 +166,12 @@ The 7 public mocks, UI-free and app-type-free: `MockSEPKeySigner` (`.success`,
 (+ `Scenario`), `MockTeleportLoginCoordinator` (+ `Scenario`),
 `MockTeleportRegistrationCoordinator` (+ `Scenario`),
 `MockWebAuthenticationSessionPresenter`.
+
+Plus `SoftwareSigner`: the software P-256 signer (`public final class
+SoftwareSigner: WebAuthnSigner, SEPKeySigning, TeleportSEPSigning`) that makes
+the SEP ceremony testable without hardware. It is a test double, so it lives
+here rather than in `TeleportCore` — that is also what lets the kept host-side
+`TeleportServerIntegrationTests` construct it from a different package.
 
 `MockTeleportKeyRing` conforms only to `TeleportCredentialStore`; the host
 restores its `TeleportKeyRingStoring` observation conformance by extension in

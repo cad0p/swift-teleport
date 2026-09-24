@@ -45,8 +45,7 @@ Sources/
 │           ├── Signer.swift                     WebAuthnSigner + SignerError
 │           ├── Attestation.swift                clientData/authData/COSE builders
 │           ├── WebAuthn.swift                   register/login response builders
-│           ├── SecureEnclaveSigner.swift        SEP-backed signer
-│           └── SoftwareSigner.swift             software P-256 signer
+│           └── SecureEnclaveSigner.swift        SEP-backed signer
 ├── TeleportAuth/                  coordinators + persistence
 │   ├── Application/
 │   │   ├── TeleportBootstrapCoordinator.swift   Phase 1 (headless bootstrap)
@@ -56,7 +55,9 @@ Sources/
 │   ├── Infrastructure/
 │   │   └── TeleportHTTPClient.swift             webapi convenience client
 │   └── PrivacyInfo.xcprivacy                    UserDefaults CA92.1
-└── TeleportTesting/               the 7 public mocks
+└── TeleportTesting/               the 8 public test doubles
+    ├── SoftwareSigner.swift                     software P-256 signer (CI seam)
+    └── Mock*.swift                              the 7 scripted mocks
 ```
 
 The `Domain` / `Application` / `Infrastructure` split mirrors the host
@@ -172,8 +173,8 @@ listener resolves exactly once.
 
 **`nonisolated deinit` convention.** Every MainActor-isolated class that can
 be released synchronously — `TeleportWebAuthnBuilder`, `TeleportGRPCConnection`,
-`BrowserMFACeremony`, `SecureEnclaveSigner`, `SoftwareSigner`, and the 7
-`TeleportTesting` mocks (12 classes) — declares an empty `nonisolated deinit {}`.
+`BrowserMFACeremony`, `SecureEnclaveSigner`, and the 8 `TeleportTesting` test
+doubles (12 classes) — declares an empty `nonisolated deinit {}`.
 The compiler-synthesized deinit of a MainActor class takes the back-deployed
 isolated-deinit path, which aborts (invalid free) when the last reference drops
 outside a task context (swiftlang/swift#85663, #88036). The empty body is

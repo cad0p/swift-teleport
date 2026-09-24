@@ -62,9 +62,12 @@ package enum SignerError: Error, LocalizedError, CustomStringConvertible {
 
 /// Generates a fresh 32-byte credential id.
 ///
+/// `package` (not `internal`) because the software signer in the
+/// `TeleportTesting` target shares it with `SecureEnclaveSigner`.
+///
 /// `precondition` on RNG failure: a credential id that silently degrades to
 /// zeros would make two devices collide.
-func newCredentialID() -> Data {
+package func newCredentialID() -> Data {
     var bytes = [UInt8](repeating: 0, count: 32)
     let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
     precondition(status == errSecSuccess, "SecRandomCopyBytes failed with OSStatus \(status)")
