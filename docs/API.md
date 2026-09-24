@@ -158,8 +158,15 @@ Phase 2.
 
 ## Enforcement
 
-`Tests/TeleportCoreConsumerTests` is a non-`@testable` target: its
-`HostSurfaceCompileTests` mirrors the host's `TeleportComposition`,
-`TeleportLiveCoordinators`, `TeleportKeyRingStoring`,
+`Fixtures/HostSurfaceCheck` is a **separate SwiftPM package** that
+path-depends on this one; its `HostSurfaceMirrors` compile the host's
+`TeleportComposition`, `TeleportLiveCoordinators`, `TeleportKeyRingStoring`,
 `TeleportKeyRingCredentialStore`, `SSHClient` host-key verification, and one
-iOS harness. A missing promotion fails that target instead of Phase 2.
+iOS harness against the public surface only. A missing promotion fails that
+build instead of Phase 2.
+
+The in-package `Tests/TeleportCoreConsumerTests` target is a non-`@testable`
+public-seam smoke test (`PublicSeamSmokeTests`); it catches `public` →
+`internal` demotions but, because `package` access is visible to every target
+in this package, it cannot catch a `public` → `package` demotion. That is what
+the sibling fixture package is for.

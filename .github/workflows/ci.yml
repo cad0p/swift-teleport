@@ -8,7 +8,9 @@
 #     app.vivy.vvterm, SessionMutex). Fast; runs on every PR.
 #   - `macos` (macos-26, Xcode 26 / Swift 6.2): `swift test` on macOS arm64 in
 #     Swift 6 language mode, plus an iOS-simulator `xcodebuild build` (build
-#     only — `swift test` already runs the suite).
+#     only — `swift test` already runs the suite), plus the cross-package
+#     host-surface fixture build (`Fixtures/HostSurfaceCheck`) that fails
+#     closed on a `public` → `package` demotion of a host-needed symbol.
 #
 # The two job names (`headers`, `macos`) are the required status checks added
 # to the `main` ruleset after PR #2 lands the version/release-PR validators
@@ -54,6 +56,9 @@ jobs:
 
       - name: Test (macOS arm64, Swift 6)
         run: swift test
+
+      - name: Build (cross-package host-surface fixture)
+        run: swift build --package-path Fixtures/HostSurfaceCheck
 
       - name: Build (iOS Simulator)
         run: |

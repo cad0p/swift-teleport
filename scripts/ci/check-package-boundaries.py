@@ -41,6 +41,12 @@ AGPL_MARKER = "SPDX-License-Identifier: AGPL-3.0-or-later"
 
 SOURCE_ROOT = "Sources"
 
+# The cross-package host-surface fixture (`Fixtures/HostSurfaceCheck/`) is
+# deliberately OUTSIDE this scan: it mirrors host code by design (including the
+# host-only `TeleportKeyRingStoring` observation protocol) and must only be
+# compiled by SwiftPM, never boundary-checked. `startswith("Sources/")` keeps
+# it out; do not widen this to a recursive `Sources` glob.
+
 # Host symbols/strings forbidden inside the package sources. `\b` keeps the
 # package's own `TeleportSessionMutex` protocol allowed. `TeleportKeyRingStoring`
 # is the host-only `@MainActor` observation protocol: the package keyring

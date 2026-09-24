@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 //
-//  HostSurfaceCompileTests.swift
-//  TeleportCoreConsumerTests
+//  HostSurfaceMirrors.swift
+//  HostSurfaceCheck
 //
-//  A NON-`@testable` compile-time contract for the Phase 2 host adoption.
-//  It mirrors the host files that consume the package —
+//  A NON-`@testable`, cross-package compile-time contract for the Phase 2
+//  host adoption. It mirrors the host files that consume the package —
 //  `Core/Teleport/TeleportComposition.swift`,
 //  `Features/Teleport/UI/TeleportLiveCoordinators.swift`,
 //  `Core/Teleport/TeleportKeyRingStoring.swift`,
@@ -13,22 +13,26 @@
 //  harness — so a missing public promotion or an access-level regression
 //  fails here instead of at Phase 2 integration time.
 //
+//  This target lives in a *separate SwiftPM package* that path-depends on
+//  `swift-teleport`. That is load-bearing: `package` access is visible to
+//  every target inside the parent package, so an in-package consumer test
+//  would stay green after a `public` → `package` demotion of a host-needed
+//  symbol. A sibling package sees only `public`, exactly like the Phase 2
+//  host. CI builds this package; see docs/verification.md §1/§2.
+//
 //  The mirrors are deliberately shaped like the host code (same parameter
 //  lists, same call sequences); the bodies are compiled, not executed.
 //
 
 import Foundation
-import Testing
 import TeleportCore
 import TeleportAuth
 import TeleportTesting
 #if canImport(AuthenticationServices)
 import AuthenticationServices
 #endif
-import CryptoKit
 import os.log
 import Security
-import SwiftProtobuf
 
 // MARK: - Mirror: host `TeleportKeyRingStoring` + its extension
 
@@ -615,17 +619,5 @@ enum HostHarnessMirror {
         let registration = MockTeleportRegistrationCoordinator(scenario: .happyPath)
         _ = registration.state
         _ = registration.lastDeviceName
-    }
-}
-
-// MARK: - Compile-only assertion
-
-@Suite("Host surface compile contract")
-struct HostSurfaceCompileTests {
-    @Test
-    func hostSurfaceMirrorsCompile() {
-        // The mirrors above are the assertion; this keeps the file a real
-        // test so it runs (and compiles) with `swift test`.
-        #expect(GRPCClientIdentity.labelPrefix == "vvterm-grpc-")
     }
 }

@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **319 tests** across two frameworks and three targets:
+`swift test` runs **318 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
 | `TeleportCoreTests` | Swift Testing | 6 | 116 |
 | `TeleportCoreTests` | XCTest | 4 | 68 |
-| `TeleportCoreConsumerTests` | Swift Testing | 2 | 8 |
+| `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
 | `TeleportAuthTests` | Swift Testing | 4 | 27 |
 | `TeleportAuthTests` | XCTest | 11 | 100 |
-| **Total** | | | **319** |
+| **Total** | | | **318** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -46,13 +46,14 @@
 | `TeleportKeyRingTests` | Swift Testing | keyring persistence through an injected `UserDefaults`; readiness; additions-only Host CA refresh (5) |
 | `TeleportCoordinatorSmokeTests` | Swift Testing | the three real coordinators against `TeleportTesting` mocks (3) |
 | `PublicSeamSmokeTests` | Swift Testing | the non-`@testable` v0.1.0 seam (7) |
-| `HostSurfaceCompileTests` | Swift Testing | the compile-only Phase-2 host contract (1) |
 
 ## Consumer smoke test
 
 `TeleportCoreConsumerTests` imports the products **without `@testable`** and
-exercises the public seam + the host adoption mirrors. It fails to compile if
-the seam regresses.
+exercises the public seam. It fails to compile if the seam regresses to
+`internal`, but it cannot catch a `public` → `package` demotion (`package`
+access is visible to every target in this package). That check is the sibling
+fixture package `Fixtures/HostSurfaceCheck`, built in CI.
 
 ## Kept host-side
 

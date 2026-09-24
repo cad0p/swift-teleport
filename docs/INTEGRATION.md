@@ -93,8 +93,9 @@ await bootstrap.begin(cluster: cluster)
 
 The `TeleportComposition`-shaped factory set (one coordinator per sheet
 presentation; the keyring, logging, and presenter shared) is the reference
-integration. `Tests/TeleportCoreConsumerTests/HostSurfaceCompileTests.swift`
-mirrors it as a compile-time contract.
+integration. `Fixtures/HostSurfaceCheck/Sources/HostSurfaceCheck/HostSurfaceMirrors.swift`
+mirrors it as a compile-time contract in a separate package (so it sees only
+`public`).
 
 ## Error mapping
 

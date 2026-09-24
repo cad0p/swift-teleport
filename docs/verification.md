@@ -8,7 +8,7 @@ gate that exercises the change; report the exact commands and results.
 | Check | Job | Green means |
 | --- | --- | --- |
 | `headers` | ubuntu | No tracked file carries the AGPL SPDX marker; no `Sources/` file (every target) references a host symbol (`SSHError`, `KeychainError`, `Logger.forCategory`, `UserDefaults.standard`, `AuthMethod`, `TeleportKeyRing.shared`, `app.vivy.vvterm`, `SessionMutex`, `TeleportKeyRingStoring`) |
-| `macos` | macos-26 | `swift build` + `swift test` pass on macOS arm64 in Swift 6 language mode; the iOS-simulator `xcodebuild build` succeeds |
+| `macos` | macos-26 | `swift build` + `swift test` pass on macOS arm64 in Swift 6 language mode; the iOS-simulator `xcodebuild build` succeeds; the cross-package host-surface fixture (`Fixtures/HostSurfaceCheck`) builds |
 | `validate-package-version` | ubuntu | the `package.json` version bump matches the change class (semver-calver) |
 | `validate-release-pr` | ubuntu | a `release/from-v*` PR bumps the version from the last released base; non-release branches skip |
 
@@ -21,15 +21,17 @@ ruleset.
 swift build
 swift build -c release          # proves TeleportTesting builds without #if DEBUG
 swift test
+swift build --package-path Fixtures/HostSurfaceCheck   # cross-package public-surface gate
 python3 -B scripts/ci/check-package-boundaries.py
 python3 -B scripts/ci/check-package-boundaries.py --selftest
 xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **319 tests** pass (168 XCTest + 151
+Expected: build clean (no warnings), **318 tests** pass (168 XCTest + 150
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
-`TeleportAuthTests`), boundary check OK, selftest OK, iOS build succeeds.
+`TeleportAuthTests`), fixture package builds, boundary check OK, selftest OK,
+iOS build succeeds.
 
 ## 3. Independent-review protocol
 
@@ -59,9 +61,14 @@ follow-up commits on the same branch; the PR description records the rounds.
 
 ### Package source change
 - `swift test` green; the boundary check green.
-- If a public signature changed: the non-`@testable`
-  `TeleportCoreConsumerTests` target still compiles (it fails closed on an
-  access-level regression, including the mirrored host surface).
+- If a public signature changed: `swift build --package-path Fixtures/HostSurfaceCheck`
+  still compiles. That fixture is a **separate package** that path-depends on
+  this one, so it sees only `public` — exactly what the Phase 2 host (also a
+  different package) sees. The in-package `TeleportCoreConsumerTests`
+  (`PublicSeamSmokeTests`) is a non-`@testable` smoke test of the public seam,
+  but it cannot fail on a `public` → `package` demotion: `package` access is
+  visible to every target inside this package. The fixture package is the
+  fail-closed gate.
 
 ### Transport / TLS change
 - `TeleportTLSTrustTests` (47) + `SSHTLSTransportTests` (13) green, including
