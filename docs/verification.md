@@ -23,7 +23,7 @@ swift build -c release          # proves TeleportTesting builds without #if DEBU
 swift test
 python3 -B scripts/ci/check-package-boundaries.py
 python3 -B scripts/ci/check-package-boundaries.py --selftest
-xcodebuild build -scheme swift-teleport \
+xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 

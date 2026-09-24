@@ -58,6 +58,6 @@ jobs:
       - name: Build (iOS Simulator)
         run: |
           xcodebuild build \
-            -scheme swift-teleport \
+            -scheme swift-teleport-Package \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO
