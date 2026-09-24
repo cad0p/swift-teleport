@@ -19,9 +19,9 @@
 
 import Foundation
 
-enum HostKeyTrustPolicy {
+public enum HostKeyTrustPolicy {
 
-    enum Decision: Equatable {
+    public enum Decision: Equatable {
         /// Accept the host key. `refreshPin` means the caller should
         /// save/replace the known-hosts pin (new entry, rotated certificate,
         /// or a non-Teleport first use).
@@ -36,7 +36,7 @@ enum HostKeyTrustPolicy {
         case unknownHost(fingerprint: String, keyType: Int)
     }
 
-    static func decide(
+    public static func decide(
         isTeleport: Bool,
         fingerprint: String,
         keyType: Int,

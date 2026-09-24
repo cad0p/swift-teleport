@@ -35,13 +35,13 @@ import Foundation
 /// unit-testable without presenting the sheet. The UI call site passes the
 /// raw device name (`UIDevice.current.name` / `Host.current().localizedName`);
 /// these functions produce the `vvterm-<sanitized>` default.
-enum TeleportDeviceName {
+public enum TeleportDeviceName {
     /// The prefix applied to every default device name.
-    static let prefix = "vvterm-"
+    public static let prefix = "vvterm-"
 
     /// The maximum length of the sanitized name (excluding the prefix),
     /// per the design doc.
-    static let maxSanitizedLength = 32
+    public static let maxSanitizedLength = 32
 
     /// Compute the default MFA device name from a raw device name.
     ///
@@ -56,7 +56,7 @@ enum TeleportDeviceName {
     ///
     /// - Parameter rawDeviceName: the raw OS device name.
     /// - Returns: the sanitized `vvterm-<sanitized>` default.
-    static func `default`(rawDeviceName: String) -> String {
+    public static func `default`(rawDeviceName: String) -> String {
         prefix + sanitize(rawDeviceName)
     }
 
@@ -76,7 +76,7 @@ enum TeleportDeviceName {
     /// emoji), returns `"device"` so the default is always non-empty (the
     /// registration sheet's Continue button is disabled for empty names —
     /// a fallback here keeps the default usable).
-    static func sanitize(_ raw: String) -> String {
+    public static func sanitize(_ raw: String) -> String {
         // 1. Lowercase.
         var s = raw.lowercased()
 
@@ -139,7 +139,7 @@ enum TeleportDeviceName {
     ///     if present)
     ///
     /// Used by the registration sheet for inline validation.
-    static func validate(_ name: String) -> String? {
+    public static func validate(_ name: String) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty {
             return "Device name required"

@@ -2,114 +2,144 @@
 
 ## Import source
 
-All files under `Sources/TeleportCore/` were imported from
-[`cad0p/vvterm`](https://github.com/cad0p/vvterm) at commit `a18a77b4`
-("chore: sweep fork-new AGPL headers to MIT + Teleport-derived carve-out
-(package extraction Phase 0c)"), the post-hardening Teleport client.
+All package sources were imported from
+[`cad0p/vvterm`](https://github.com/cad0p/vvterm) at commit `291d75fb`
+("ci(ui-tests): harden the PR shards — wedge retry, 4-bin rebalance, 300s
+hang timeout, debug-test flags, doc sweep (closes #229)"), the post-Stage-A
+tree:
+
+- **v0.1.0** imported 18 files at `a18a77b4` (the post-Phase-0c sweep) — the
+  dependency-closed core (D6 seam + transports).
+- **Stage A** (`ba81877c`, "refactor(teleport): clean-room rewrite") rewrote
+  the 9 package-movable Teleport-derived files so they are independent
+  implementations of the documented public contract, shrinking the host's
+  AGPL allowlist 17 → 7 rows.
+- **v0.2.0** imports the remaining **25 deferred files + 7 `TeleportTesting`
+  mocks + `iotest_mfa.proto` + the regen script** from `291d75fb` (which
+  carries the Stage A rewrite) and splits them into `TeleportCore` +
+  `TeleportAuth` + `TeleportTesting`.
 
 The import preserves file content except for:
 
-1. **Access-level promotion** — the D6 seam protocols, the transports, and
-   every type reachable from their public signatures are now `public`
-   (the package's contract). Model internals stay `internal`.
-2. **Minimal Swift 6 diagnostics** — the host app builds these files in Swift
+1. **Access-level promotion** — the types and members the host's Phase-2 call
+   sites name (and everything reachable across the three package targets) are
+   now `public`/`package` (the package's contract). Model internals stay
+   `internal`. Types that cross the module boundary also gained explicit
+   initialisers where the implicit memberwise/`init()` was not visible outside
+   the module — the wire types in `MFALoginWireTypes` and `HeadlessLogin`,
+   `BootstrapResult`, `TLSKeyPair`, three protocol-support classes in
+   `TeleportInfrastructureProtocols`, and the `TeleportTesting` mocks. Each was
+   audited to reproduce the suppressed initialiser exactly — same parameter
+   order and types, same defaults.
+2. **Module imports** — the `TeleportAuth`/`TeleportTesting` files import
+   `TeleportCore` (and `TeleportTesting` imports `TeleportAuth`) at the new
+   module boundaries.
+3. **Minimal Swift 6 diagnostics** — the host app builds these files in Swift
    **5** language mode with `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`; this
    package builds them in Swift **6** language mode with
-   `.defaultIsolation(MainActor.self)`. The handful of declarations the
-   default isolation does not cover are marked `nonisolated` (see below).
+   `.defaultIsolation(MainActor.self)`. The declarations the default isolation
+   does not cover are marked `nonisolated`/`@Sendable`, and the XCTest suites
+   follow the `nonisolated final class` + `@MainActor` test-method pattern
+   (see below).
+4. **`TeleportTesting` composition** — the 7 mocks drop their `#if DEBUG`
+   gates, `MockTeleportKeyRing` ships **without** the host-only
+   `TeleportKeyRingStoring` conformance (the host restores it by extension in
+   Phase 2), and `MockTeleportHTTPClient`'s `#filePath` fixture coupling is
+   replaced by plain scripted scenarios (the fixture-bound payload factories
+   live in the test targets). `SoftwareSigner` moves from `TeleportCore` to
+   `TeleportTesting` (and `package` → `public`) because its only consumers are
+   test targets.
+5. **One deliberate behaviour fix** — `SSHTLSTransport`'s pump end is now
+   closed through a single-owner guard (`PumpFDCloser`). The host closes that
+   fd from six racing paths and treats a repeated `close(2)` as harmless; it is
+   not — if the fd number has been reused for another file, the close lands on
+   the wrong file and the next read there fails with `EBADF`. Found via a
+   spurious fixture-read failure under the package's parallel `swift test`; the
+   host carries the identical code and hazard
+   ([`cad0p/vvterm#234`](https://github.com/cad0p/vvterm/issues/234)). Two
+   regression tests pin the guard, including a source-level pin that no raw
+   `Darwin.close(...pumpFD...)` reappears.
 
 Nothing else changed.
 
-## Imported set (18 files)
+## Imported set (v0.2.0 additions: 32 files + proto + script)
+
+### `TeleportCore` additions (19 files + the IDL)
 
 | Path | Origin |
 | --- | --- |
-| `Domain/BrowserMFAPresenting.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/HostKeyTrustPolicy.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/OpenSSHCertificate.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/OpenSSHHostCertVerifier.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportChannelTransport.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportCluster.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportClusterTLSState.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportCredential.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportCredentialStore.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportDeviceName.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportDeviceReadiness.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportKeychainConfig.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportLogging.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Domain/TeleportPackageError.swift` | `VVTerm/Features/Teleport/Domain/` |
-| `Application/SSHCertExpiryParser.swift` | `VVTerm/Features/Teleport/Application/` |
-| `Infrastructure/SSHTLSTransport.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
-| `Infrastructure/TeleportProxySubsystem.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
-| `Infrastructure/TeleportTLSTrust.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/iotest_mfa.pb.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/iotest_mfa.proto` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/GRPCClient.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/GRPCTransport.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/HeadlessID.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/HeadlessLogin.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/MFALoginWireTypes.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/TeleportTrustSession.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/TLSKeyPair.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/BrowserMFAListener.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/BrowserMFACeremony.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/SEPWebAuthn/CBOR.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
+| `Infrastructure/SEPWebAuthn/SSHPubKey.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
+| `Infrastructure/SEPWebAuthn/Signer.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
+| `Infrastructure/SEPWebAuthn/Attestation.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
+| `Infrastructure/SEPWebAuthn/WebAuthn.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
+| `Infrastructure/SEPWebAuthn/SecureEnclaveSigner.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/` |
+| `Application/TeleportInfrastructureProtocols.swift` | `VVTerm/Features/Teleport/Application/` |
+| `Domain/TeleportIssuedCertValidator.swift` | `VVTerm/Features/Teleport/Domain/` |
+| `Domain/TeleportWebAuthnRPID.swift` | `VVTerm/Features/Teleport/Domain/` |
 
-### Inclusion criterion
+### `TeleportAuth` (5 files)
 
-Every imported file is consumed by another imported file or by a host-side file
-that will import the package in Phase 2:
+| Path | Origin |
+| --- | --- |
+| `Application/TeleportBootstrapCoordinator.swift` | `VVTerm/Features/Teleport/Application/` |
+| `Application/TeleportLoginCoordinator.swift` | `VVTerm/Features/Teleport/Application/` |
+| `Application/TeleportRegistrationCoordinator.swift` | `VVTerm/Features/Teleport/Application/` |
+| `Application/TeleportKeyRing.swift` | `VVTerm/Features/Teleport/Application/` |
+| `Infrastructure/TeleportHTTPClient.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
 
-- `SSHTLSTransport`, `SSHCertExpiryParser`, `TeleportProxySubsystem` by the host
-  `SSHSession` / seam bridge;
-- `TeleportTLSTrust` by `SSHTLSTransport` in-package;
-- the seam protocols by the host composition root.
+### `TeleportTesting` (8 files)
 
-`TeleportWebAuthnRPID` was **in the plan's 19-file list but fails the
-criterion**: its only consumers are the deferred login/registration
-coordinators (and its own test), with no host-side Phase-2 consumer. It is
-therefore deferred, making the skeleton **18 files**. This is the plan's
-W4 inclusion criterion applied as written — it defers any file whose only
-consumers are deferred.
+`MockSEPKeySigner`, `MockTeleportBootstrapCoordinator`,
+`MockTeleportHTTPClient`, `MockTeleportKeyRing`,
+`MockTeleportLoginCoordinator`, `MockTeleportRegistrationCoordinator`,
+`MockWebAuthenticationSessionPresenter` — all from
+`VVTerm/Features/Teleport/UITesting/`.
 
-## Deferred set (25 files)
+| Path | Origin |
+| --- | --- |
+| `SoftwareSigner.swift` | `VVTerm/Features/Teleport/Infrastructure/SEPWebAuthn/SoftwareSigner.swift` |
 
-### Teleport-derived — Phase 1b clean-room rewrite gate (9)
+The 8th entry is a deliberate **product move** (not a content change):
+`SoftwareSigner` is a software test double whose only consumers are test
+targets, so it ships in the test-support product as `public` instead of
+`package` inside `TeleportCore`. That is what makes the kept host-side
+`TeleportServerIntegrationTests` (a different package in Phase 2) able to
+construct it. See `docs/API.md` § `TeleportTesting`.
 
-These files are Go ports/adaptations of Teleport source and carry
-`AGPL-3.0-or-later` in the host. They **must not** enter this MIT package until
-a clean-room rewrite lands (Phase 1b, `v0.2.0`); the byte-exact Go-generated
-fixtures are the oracle.
+### Regeneration script
 
-- `HeadlessID`, `HeadlessLogin`
-- `BrowserMFAListener`, `BrowserMFACeremony`
-- `SEPWebAuthn/{Attestation, Signer, WebAuthn, SecureEnclaveSigner}`
-- `iotest_mfa.pb.swift` (and the `iotest_mfa.proto` IDL + regen script, per D8)
-
-### Cascade (8)
-
-Dependency-closed but only reachable through the deferred derived files:
-
-- `TeleportBootstrapCoordinator`, `TeleportLoginCoordinator`,
-  `TeleportRegistrationCoordinator`
-- `TeleportInfrastructureProtocols`, `TeleportKeyRing`
-- `MFALoginWireTypes`, `TeleportHTTPClient`
-- `SEPWebAuthn/SoftwareSigner`
-
-### No consumer / NIO + protobuf (4)
-
-- `GRPCClient`, `GRPCTransport` — need SwiftNIO + SwiftProtobuf
-- `SEPWebAuthn/CBOR`, `SEPWebAuthn/SSHPubKey` — no consumer in the core
-
-`v0.1.0` is intentionally **zero-dependency**; the NIO/protobuf files arrive
-with the `v0.2.0` gRPC mapping.
-
-### Deferred consumer (4)
-
-Consumed only by deferred files (or by the host UI):
-
-- `TeleportWebAuthnRPID` — deferred coordinators
-- `TeleportTrustSession` — deferred consumers
-- `TLSKeyPair` — deferred bootstrap coordinator
-- `TeleportIssuedCertValidator` — deferred coordinators + its own test
-
-`TeleportIssuedCertValidatorTests` is deferred with its subject: it needs
-`TLSKeyPair` plus the excluded `TeleportSSHKeyPairGenerating` protocol.
+`scripts/regen-iotest-mfa.sh` — adapted from `cad0p/vvterm`'s
+`scripts/regen-iotest-mfa.sh` to the package path
+(`Sources/TeleportCore/Infrastructure`). Pins `protoc 36.2` +
+`protoc-gen-swift 1.38.1`, passes `Visibility=Public`, reapplies the
+`nonisolated` patch by pattern, and asserts the generated shape. Verified
+byte-reproducible against the committed `.pb.swift`.
 
 ### Host-side by design (not part of the package)
 
-- `SSHProxySubsystemTransport` — the libssh2 channel bridge (14 libssh2 calls +
-  `SessionMutex`); exposed to the package only through
+- `SSHProxySubsystemTransport` + `SessionMutex` — the libssh2 channel bridge
+  (14 libssh2 calls); exposed to the package only through
   `TeleportChannelTransportFactory` (D6).
-- `UI/*`, `UITesting/*` — the app's SwiftUI surfaces and UI-test mocks.
+- `Core/Teleport/*` host adapters (`TeleportComposition`,
+  `TeleportKeyRingHost`, `TeleportKeyRingCredentialStore`,
+  `TeleportKeyRingStoring`, `TeleportErrorMapping`,
+  `TeleportKeychainConfig+App`).
+- `UI/*` (the SwiftUI surfaces + `TeleportLiveCoordinators`), the iOS UI-test
+  harnesses, and the remaining host-side AGPL files
+  (`TeleportLiveCoordinators.swift`, `scripts/ci/teleport-webauthn.py`, the 4
+  spike copies, the Go fixture generator).
 
 ## Swift 6 changes (minimal, behavior-preserving)
 
@@ -118,31 +148,50 @@ Consumed only by deferred files (or by the host UI):
 | `TeleportTLSTrust` (enum) | `nonisolated` | pure-function enum; called from `SSHTLSTransport`'s nonisolated statics |
 | `TeleportLogging.logger(category:)` | `nonisolated` | `os.Logger` construction is thread-safe; requested from the transport actor |
 | `DefaultTeleportLogging.logger(category:)` | `nonisolated` | protocol witness |
-
-The host app runs Swift 5 language mode, where these were warnings; the package
-runs Swift 6, where they are errors. No behavior changed.
-
-Three imported files carry no SPDX line because they carried none upstream
-(`TeleportCluster.swift`, `TeleportCredential.swift`,
-`TeleportDeviceReadiness.swift`). The package-level `LICENSE` (MIT) governs;
-no file carries an AGPL marker.
+| `iotest_mfa.pb.swift` | 26 structs + 3 enums + `_protobuf_package` `nonisolated` | generated types must compile under `.defaultIsolation(MainActor.self)` (B3.1) |
+| `GRPCClient.withTimeout<T>` | `T: Sendable` | `withThrowingTaskGroup` under Swift 6 (B3.2) |
+| `TLSKeyPair` | `nonisolated struct` + explicit init | constructed from nonisolated contexts (B3.5) |
+| `CBOR`'s `Data` base64url helpers | `nonisolated extension` | called from the mocks' nonisolated statics (B3.6) |
+| `BrowserMFAListener` | `nonisolated` + lock-boxed state + `@Sendable` locals | Swift 6 concurrency, rewritten in Stage A |
+| `GRPCTransport`'s captured multiplexer | captured `var` → `NIOLockedValueBox` | the host form was an **unsynchronized** capture across the channel-initializer closure; Swift 6 rejects it, and the lock is strictly safer. Single-writer overwrite semantics are preserved (the direction of the change is safer, not merely diagnostic) |
+| `TeleportTesting` mocks | `@MainActor` class + `@MainActor` isolated conformance | protocol conformances crossing module boundaries |
+| `SoftwareSigner` | `@MainActor` class + `@MainActor` on each conformance | same rule, after the move into `TeleportTesting` (`WebAuthnSigner`/`SEPKeySigning`/`TeleportSEPSigning` are declared in `TeleportCore`) |
+| XCTest suites | `nonisolated final class` + `@MainActor` methods | `XCTestCase`'s inherited initializers are nonisolated |
 
 ## Fixtures
 
-`Tests/TeleportCoreTests/Fixtures/` is imported from
-`VVTermTests/Features/Teleport/Fixtures/` at the same commit. The material is
-**test-only, generated, public**: OpenSSH CA/host/user certs + keys, generated
-loopback TLS identities (PKCS#12 + PEM) with the well-known test password, and
-captured public certificate chains. No production secret is present. Fixtures
-are read at runtime via `#filePath`-relative paths (the host convention) and are
-declared `exclude` in `Package.swift` so SwiftPM does not treat them as target
+`Tests/TeleportCoreTests/Fixtures/` (v0.1.0) and
+`Tests/TeleportPackageTests/Fixtures/` (v0.2.0) carry test-only, generated,
+public material. The Core tree is the single canonical fixture root for the
+OpenSSH CA/host/user certs + keys, the generated loopback TLS identities
+(PKCS#12 + PEM) with the well-known test password, and the captured public
+certificate chains; the `TeleportPackageTests` suites (which host Core- and
+Auth-subject tests) read that same tree, so there is exactly one copy. The
+`TeleportPackageTests/Fixtures/SEPWebAuthn/` subtree holds the **8 Go-generated
+SEP/WebAuthn fixtures** (`client_data_{create,get}.json`,
+`auth_data_{create,get}.bin`, `cose_pubkey.cbor`, `pub_key_raw.bin`,
+`signature_create.der`, `attestation_object_create.cbor`), which no Core suite
+uses.
+
+The 8 SEP fixtures are copied from `cad0p/vvterm`'s
+`spikes/sep-webauthn/fixtures/expected/` at `291d75fb` (committed in the
+Stage A prep PR `#212`). They are the byte-exact oracle for the clean-room
+SEP rewrite; the package copies them so the `macos` CI job runs the
+comparison without a Go toolchain. No production secret is present.
+Fixtures are read at runtime via `#filePath`-relative paths and are declared
+`exclude` in `Package.swift` so SwiftPM does not treat them as target
 sources.
 
-## Phase 1b gate
+## Host-side Teleport notice (for reference)
 
-The 9 Teleport-derived files above must be rewritten clean-room (specs: W3C
-WebAuthn L2, CTAP2 canonical CBOR, RFC 9562 UUIDv5, OpenSSH authorized_keys,
-the public Teleport client API contract; oracle: the byte-exact Go-generated
-fixtures) before they can be imported into this MIT package. The remaining
-deferred files are then imported alongside them, together with `TeleportTesting`
-and the proto/regen script, cutting `v0.2.0`.
+The host's remaining AGPL carve-out is enumerated in `cad0p/vvterm`'s
+`docs/teleport-derived-files.txt` (7 rows) and covered by its
+`LICENSES/AGPL-3.0-or-later.txt`. Aggregate host licensing: the `cad0p/vvterm`
+repository as distributed stays GPL-3.0; AGPL-3.0 and GPL-3.0 combination is
+permitted by GPLv3 section 13.
+
+## Phase 2 gate
+
+The host adopts `v0.2.0` by pinning `exactVersion` and restoring its
+observation conformance (`extension TeleportKeyRing: TeleportKeyRingStoring`)
++ its live adapters at the composition root. Phase 2 is out of scope here.

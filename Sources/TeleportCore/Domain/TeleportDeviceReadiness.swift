@@ -6,7 +6,7 @@ import Foundation
 /// (splits needsRegistration from needsBootstrap).
 ///
 /// See: 2026-07-23-strategy-b-session2.2-teleport-ui-design.md (mockup B)
-enum TeleportDeviceReadiness: Equatable {
+public enum TeleportDeviceReadiness: Equatable {
     /// No Phase-1 cert in keychain. New device via iCloud, or never bootstrapped.
     case needsBootstrap
     /// Phase-1 cert present, but no SEP key registered for this cluster.
@@ -19,7 +19,7 @@ enum TeleportDeviceReadiness: Equatable {
     case ready
 
     /// Whether setup is required (any non-ready state).
-    var needsSetup: Bool {
+    public var needsSetup: Bool {
         switch self {
         case .ready: return false
         case .needsBootstrap, .needsRegistration, .needsLogin: return true
@@ -27,7 +27,7 @@ enum TeleportDeviceReadiness: Equatable {
     }
 
     /// Whether the Safari bootstrap flow is needed (vs. just native Face ID).
-    var needsSafari: Bool {
+    public var needsSafari: Bool {
         switch self {
         case .ready, .needsLogin: return false
         case .needsBootstrap, .needsRegistration: return true
@@ -37,25 +37,25 @@ enum TeleportDeviceReadiness: Equatable {
 
 /// Pure function to compute readiness from keychain state.
 /// The keychain queries are injected so this is unit-testable without a real keychain.
-struct TeleportDeviceReadinessResolver {
+package struct TeleportDeviceReadinessResolver {
     /// Returns true if a Phase-1 bootstrap cert exists for this cluster.
-    typealias HasBootstrapCert = (UUID) -> Bool
+    package typealias HasBootstrapCert = (UUID) -> Bool
     /// Returns true if a SEP key is registered for this cluster.
-    typealias HasSEPKey = (UUID) -> Bool
+    package typealias HasSEPKey = (UUID) -> Bool
     /// Returns the live cert's ValidBefore, or nil if no cert.
-    typealias CertExpiry = (UUID) -> Date?
+    package typealias CertExpiry = (UUID) -> Date?
     /// Returns true if Host CA checking keys are persisted for this cluster.
     /// Missing keys on an otherwise-registered device route to `.needsLogin`
     /// (the login response refreshes them) — legacy installs never capture
     /// checking keys until their next login.
-    typealias HasHostCAKeys = (UUID) -> Bool
+    package typealias HasHostCAKeys = (UUID) -> Bool
 
-    let hasBootstrapCert: HasBootstrapCert
-    let hasSEPKey: HasSEPKey
-    let certExpiry: CertExpiry
-    let hasHostCAKeys: HasHostCAKeys
+    package let hasBootstrapCert: HasBootstrapCert
+    package let hasSEPKey: HasSEPKey
+    package let certExpiry: CertExpiry
+    package let hasHostCAKeys: HasHostCAKeys
 
-    init(
+    package init(
         hasBootstrapCert: @escaping HasBootstrapCert,
         hasSEPKey: @escaping HasSEPKey,
         certExpiry: @escaping CertExpiry,
@@ -67,7 +67,7 @@ struct TeleportDeviceReadinessResolver {
         self.hasHostCAKeys = hasHostCAKeys
     }
 
-    func resolve(clusterId: UUID, now: Date = Date()) -> TeleportDeviceReadiness {
+    package func resolve(clusterId: UUID, now: Date = Date()) -> TeleportDeviceReadiness {
         guard hasBootstrapCert(clusterId) else { return .needsBootstrap }
         guard hasSEPKey(clusterId) else { return .needsRegistration }
         guard hasHostCAKeys(clusterId) else { return .needsLogin }
