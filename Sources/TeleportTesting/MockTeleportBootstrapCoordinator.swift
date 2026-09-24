@@ -38,6 +38,8 @@ import TeleportAuth
 /// bootstrap sheet's recovery UX for every failure case in mockup C.
 @MainActor
 public final class MockTeleportBootstrapCoordinator: ObservableObject, TeleportBootstrapCoordinating {
+
+    nonisolated deinit {}
     /// The scripted bootstrap scenario. Each maps to a specific recovery UX.
     public enum Scenario: Equatable {
         /// The user approves in Safari → POST returns with a cert → success.

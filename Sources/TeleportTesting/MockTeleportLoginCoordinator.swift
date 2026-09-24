@@ -32,6 +32,8 @@ import TeleportAuth
 /// recovery UX for every case in mockup E, including the Face ID outcomes.
 @MainActor
 public final class MockTeleportLoginCoordinator: ObservableObject, TeleportLoginCoordinating {
+
+    nonisolated deinit {}
     /// The scripted login scenario.
     public enum Scenario: Equatable {
         /// Happy path: Face ID succeeds, cert issued. The `certValidUntil`

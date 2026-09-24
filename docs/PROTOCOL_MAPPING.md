@@ -13,17 +13,30 @@
 | Encoded cluster name (`api/utils/cluster.go:EncodeClusterName`) | `TeleportTLSTrust.encodedClusterName(_:)` |
 | Certificate ValidBefore | `SSHCertExpiryParser.validBefore(pem:)` |
 
-## gRPC / protobuf — arrives in v0.2.0
+## gRPC / protobuf
 
-**The `v0.1.0` skeleton ships no proto and no protobuf/gRPC mapping.** The
-gRPC auth transport (`GRPCClient`, `GRPCTransport`), the committed
-`iotest_mfa.pb.swift`, the `iotest_mfa.proto` IDL, and the proto regeneration
-script are all deferred to `v0.2.0`.
+| Teleport protocol / route | This package |
+| --- | --- |
+| Auth-service mTLS over ALPN-SNI `teleport-auth@<hex(cluster)>` + `h2` | `GRPCTLSOptions.make`, `TeleportGRPCConnection.connect` |
+| HTTP/2 framing + gRPC unary calls (`POST /proto.AuthService/<Method>`) | `GRPCClient.grpcUnaryCall(Typed)`, `TeleportGRPCConnection.unary` |
+| `AuthService/CreateAuthenticateChallenge` (MANAGE_DEVICES scope + BrowserMFA redirect) | `Proto_CreateAuthenticateChallengeRequest`/`Proto_MFAAuthenticateChallenge` |
+| `AuthService/CreateRegisterChallenge` (WEBAUTHN + PASSWORDLESS) | `Proto_CreateRegisterChallengeRequest`/`Proto_MFARegisterChallenge` |
+| `AuthService/AddMFADeviceSync` (ContextUser cert auth) | `Proto_AddMFADeviceSyncRequest` |
+| Browser MFA challenge/response (`/web/mfa/browser/<request_id>`) | `Proto_BrowserMFAChallenge`/`Proto_BrowserMFAResponse`, `BrowserMFACeremony`, `BrowserMFAListener` |
+| WebAuthn credential creation/assertion wire JSON | `WebAuthn.register`/`login`, `CredentialCreationResponse`/`CredentialAssertionResponse` |
 
-That work needs the ALPN auth route (`teleport-auth@<hex(cluster)>`) and the
-SwiftNIO + SwiftProtobuf dependency set — the package is intentionally
-zero-dependency in `v0.1.0`, so the NIO/protobuf files are held back. The
-mapping helpers that the gRPC leg will use (`TeleportTLSTrust.authServerNames`,
-`encodedClusterName`, `makeVerifyBlock`) are already present and public.
+The IDL is the committed `Sources/TeleportCore/Infrastructure/iotest_mfa.proto`;
+the generated `iotest_mfa.pb.swift` is `Visibility=Public` and patched
+`nonisolated` (see the regen script). The message/field numbers are the wire
+contract; `ProtoWireCompatTests` pins golden bytes captured from the
+pre-rewrite IDL.
 
-See [`PROVENANCE.md`](PROVENANCE.md) for the full deferred inventory.
+## Headless + web-api
+
+| Teleport route | This package |
+| --- | --- |
+| Headless auth ID (`services.NewHeadlessAuthenticationID`) | `HeadlessID.compute(sshAuthorizedKey:)` — UUIDv5 layout with SHA-256, 16-zero-byte namespace, one trailing `\n` |
+| `POST /webapi/headless/login` (blocking, ~180 s) | `HeadlessLogin.post`, `TeleportTrustSession.session` (200 s timeouts) |
+| `GET /webapi/ping` | `TeleportHTTPClient.ping` |
+| `POST /webapi/mfa/login/begin` + `/finish` | `TeleportHTTPClient.loginBegin`/`loginFinish`, `LoginBeginResponse`/`LoginFinishResponse`/`LoginFinishReq` |
+| `tls_cert`/`cert`/`checking_keys` base64 `[]byte` wire shape | `HeadlessLoginResponse`, `TeleportHostCACheckingKeysDecoder` |

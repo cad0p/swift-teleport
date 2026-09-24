@@ -15,6 +15,8 @@ import TeleportCore
 /// `cancel()` is recorded but does nothing.
 @MainActor
 public final class MockWebAuthenticationSessionPresenter: WebAuthenticationSessionPresenting {
+
+    nonisolated deinit {}
     /// The value returned by `open(url:)`. Default `true` (Safari "opened").
     public var scriptedOpenResult: Bool = true
 

@@ -7,7 +7,7 @@ gate that exercises the change; report the exact commands and results.
 
 | Check | Job | Green means |
 | --- | --- | --- |
-| `headers` | ubuntu | No tracked file carries the AGPL SPDX marker; no `Sources/TeleportCore` file references a host symbol (`SSHError`, `KeychainError`, `Logger.forCategory`, `UserDefaults.standard`, `AuthMethod`, `TeleportKeyRing.shared`, `app.vivy.vvterm`, `SessionMutex`) |
+| `headers` | ubuntu | No tracked file carries the AGPL SPDX marker; no `Sources/` file (every target) references a host symbol (`SSHError`, `KeychainError`, `Logger.forCategory`, `UserDefaults.standard`, `AuthMethod`, `TeleportKeyRing.shared`, `app.vivy.vvterm`, `SessionMutex`, `TeleportKeyRingStoring`) |
 | `macos` | macos-26 | `swift build` + `swift test` pass on macOS arm64 in Swift 6 language mode; the iOS-simulator `xcodebuild build` succeeds |
 | `validate-package-version` | ubuntu | the `package.json` version bump matches the change class (semver-calver) |
 | `validate-release-pr` | ubuntu | a `release/from-v*` PR bumps the version from the last released base; non-release branches skip |
@@ -19,6 +19,7 @@ ruleset.
 
 ```bash
 swift build
+swift build -c release          # proves TeleportTesting builds without #if DEBUG
 swift test
 python3 -B scripts/ci/check-package-boundaries.py
 python3 -B scripts/ci/check-package-boundaries.py --selftest
@@ -26,9 +27,9 @@ xcodebuild build -scheme swift-teleport \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), 191 tests pass (68 XCTest + 123 Swift
-Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests`), boundary
-check OK, selftest OK, iOS build succeeds.
+Expected: build clean (no warnings), **319 tests** pass (168 XCTest + 151
+Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
+`TeleportAuthTests`), boundary check OK, selftest OK, iOS build succeeds.
 
 ## 3. Independent-review protocol
 
@@ -60,7 +61,7 @@ follow-up commits on the same branch; the PR description records the rounds.
 - `swift test` green; the boundary check green.
 - If a public signature changed: the non-`@testable`
   `TeleportCoreConsumerTests` target still compiles (it fails closed on an
-  access-level regression).
+  access-level regression, including the mirrored host surface).
 
 ### Transport / TLS change
 - `TeleportTLSTrustTests` (47) + `SSHTLSTransportTests` (13) green, including
@@ -68,9 +69,23 @@ follow-up commits on the same branch; the PR description records the rounds.
 - Re-check the `nonisolated` markers on `TeleportTLSTrust` and
   `TeleportLogging` if isolation changed.
 
+### gRPC / protobuf change
+- `ProtoWireCompatTests` green (the golden bytes are the wire contract).
+- Regenerate with `scripts/regen-iotest-mfa.sh` (pinned `protoc 36.2` +
+  `protoc-gen-swift 1.38.1`) and commit the `.pb.swift` with the IDL.
+
+### WebAuthn / SEP change
+- `FixtureTests` (8) green — the byte-exact Go oracle; an absent fixture is a
+  hard failure, never a skip.
+- `SEPSignerAlgorithmTests` + `WebAuthnResponseJSONTests` green.
+
+### Coordinator / keyring change
+- `TeleportKeyRingTests` + `TeleportCoordinatorSmokeTests` green; the
+  redaction pins (`TeleportRedactionTests`) green when a log site changes.
+
 ### Test change
-- No ported suite may reference `MockTeleportHTTPClient` /
-  `MockTeleportKeyRing` (excluded mocks) or a host type.
+- The package-owned suites may use the `TeleportTesting` mocks; they must not
+  reference a host type.
 - Fixtures stay hermetic (no secrets, no real server).
 
 ### Release / version change

@@ -56,6 +56,8 @@ import TeleportCore
 ///     `.faceIDUnavailable`).
 @MainActor
 public final class MockSEPKeySigner: @MainActor TeleportSEPSigning {
+
+    nonisolated deinit {}
     /// The scripted Face ID outcome.
     public enum Outcome {
         /// Face ID succeeds — the SEP key is created/loaded/signed without

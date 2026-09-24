@@ -33,6 +33,8 @@ import TeleportAuth
 /// registration sheet's recovery UX for every case in mockup D.
 @MainActor
 public final class MockTeleportRegistrationCoordinator: ObservableObject, TeleportRegistrationCoordinating {
+
+    nonisolated deinit {}
     /// The scripted registration scenario.
     public enum Scenario: Equatable {
         /// The SEP key is created + registered + persisted → success.

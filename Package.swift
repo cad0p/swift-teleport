@@ -78,6 +78,15 @@ let package = Package(
             dependencies: ["TeleportCore", "TeleportAuth", "TeleportTesting"],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
+        .testTarget(
+            name: "TeleportAuthTests",
+            dependencies: ["TeleportCore", "TeleportAuth", "TeleportTesting"],
+            // Fixtures are read at runtime via `#filePath`-relative paths; the
+            // 8 SEPWebAuthn Go fixtures + the OpenSSH/loopback-TLS identities
+            // are data, not target sources.
+            exclude: ["Fixtures"],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
+        ),
     ],
     swiftLanguageModes: [.v6]
 )

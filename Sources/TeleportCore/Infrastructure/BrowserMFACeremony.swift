@@ -73,6 +73,8 @@ private extension GRPCError {
 @MainActor
 public final class BrowserMFACeremony: NSObject {
 
+    nonisolated deinit {}
+
     /// The ceremony's logger (category `TeleportBrowserMFA`).
     private let logger: Logger
     /// The in-app browser presenter.

@@ -39,6 +39,8 @@ import TeleportCore
 /// cross-device).
 @MainActor
 public final class MockTeleportKeyRing: ObservableObject, TeleportCredentialStore {
+
+    nonisolated deinit {}
     /// A scripted fixture for a single cluster's credential state.
     public struct Fixture {
         /// Whether a bootstrap cert (PEM) is present.

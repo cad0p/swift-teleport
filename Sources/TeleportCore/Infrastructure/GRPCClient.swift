@@ -182,9 +182,16 @@ func grpcUnaryCall<R: SwiftProtobuf.Message>(
     }
 
     // Add the codec + response handler to the stream pipeline.
-    let codec = HTTP2FramePayloadToHTTP1ClientCodec(httpProtocol: .https)
+    //
+    // `HTTP2FramePayloadToHTTP1ClientCodec` deliberately marks its `Sendable`
+    // conformance unavailable (NIOHTTP2 owns that decision), so construct and
+    // add it on the stream's event loop rather than transferring it across an
+    // isolation boundary.
+    try await streamChannel.eventLoop.submit {
+        let codec = HTTP2FramePayloadToHTTP1ClientCodec(httpProtocol: .https)
+        try streamChannel.pipeline.syncOperations.addHandler(codec)
+    }.get()
     let promise = streamChannel.eventLoop.makePromise(of: Data.self)
-    try await streamChannel.pipeline.addHandler(codec).get()
     try await streamChannel.pipeline.addHandler(GRPCUnaryHandler(promise: promise)).get()
 
     // Build + send the request HEADERS + body + END.
@@ -201,11 +208,11 @@ func grpcUnaryCall<R: SwiftProtobuf.Message>(
     let head = HTTPRequestHead(version: .http2, method: .POST, uri: path, headers: headers)
 
     let allocator = streamChannel.allocator
-    streamChannel.write(NIOAny(HTTPClientRequestPart.head(head)), promise: nil)
+    streamChannel.write(HTTPClientRequestPart.head(head), promise: nil)
     var bodyBuffer = allocator.buffer(capacity: frame.count)
     bodyBuffer.writeBytes(frame)
-    streamChannel.write(NIOAny(HTTPClientRequestPart.body(.byteBuffer(bodyBuffer))), promise: nil)
-    streamChannel.write(NIOAny(HTTPClientRequestPart.end(nil)), promise: nil)
+    streamChannel.write(HTTPClientRequestPart.body(.byteBuffer(bodyBuffer)), promise: nil)
+    streamChannel.write(HTTPClientRequestPart.end(nil), promise: nil)
     streamChannel.flush()
 
     // Await the response body.

@@ -1,13 +1,13 @@
 # Public API
 
-The `TeleportCore` product exports the **D6 seam**, the **transports**, and the
-types reachable from their signatures. Model internals (the OpenSSH parser, the
-trust policy, the readiness resolver, the cluster/credential models) stay
-`internal` until `v0.2.0`.
+Three products: `TeleportCore` (seam + transports + gRPC/protobuf + WebAuthn/SEP
++ wire types), `TeleportAuth` (coordinators + keyring + web-api client), and
+`TeleportTesting` (the mocks). Per the package's `0.x` policy (D13), minors may
+break the API; patches never.
 
-Per the package's `0.x` policy (D13), minors may break the API; patches never.
+## `TeleportCore`
 
-## Seam protocols
+### Seam protocols
 
 ```swift
 public protocol TeleportLogging: Sendable {
@@ -20,137 +20,146 @@ public struct DefaultTeleportLogging: TeleportLogging {
     public nonisolated func logger(category: String) -> Logger
 }
 
-public protocol TeleportCredentialStore: Sendable {
-    func clusterTLSState(for clusterId: UUID) async -> TeleportClusterTLSState?
-    func liveCertPEM(for clusterId: UUID) async -> String?
-    func liveEd25519PrivateKey(for clusterId: UUID) async -> Data?
-    func registeredCredentialID(for clusterId: UUID) async -> Data?
-    func registeredUserHandle(for clusterId: UUID) async -> Data?
-    func storeBootstrapCert(_ certPEM: String, validBefore: Date, for clusterId: UUID) async
-    func storeRegisteredSEPKey(credentialID: Data, userHandle: Data, publicKeyRaw: Data,
-                               deviceName: String, for clusterId: UUID) async
-    func storeLoginCert(_ certPEM: String, validBefore: Date, for clusterId: UUID) async
-    func storeEd25519PrivateKey(_ pemData: Data, for clusterId: UUID) async throws
-    func storeClusterTLSState(_ state: TeleportClusterTLSState, for clusterId: UUID) async
-    func updateClusterHostKeys(_ checkingKeys: [String],
-                               for clusterId: UUID) async -> TeleportHostKeyUpdateResult
-    func clear(for clusterId: UUID) async
-}
+public protocol TeleportCredentialStore: Sendable { /* 12 async members */ }
 
-@MainActor public protocol BrowserMFASessionHandle: AnyObject, Sendable {
-    var didStart: Bool { get }
-    func cancel()
-}
+@MainActor public protocol BrowserMFASessionHandle: AnyObject, Sendable { … }
+@MainActor public protocol BrowserMFAPresenting: Sendable { … }
+public protocol WebAuthenticationSessionPresenting: AnyObject { … }
 
-@MainActor public protocol BrowserMFAPresenting: Sendable {
-    func present(url: URL,
-                 completion: @escaping @Sendable (Error?) -> Void) async -> any BrowserMFASessionHandle
-}
+public protocol TeleportSessionMutex: Sendable { … }
+public protocol TeleportChannelTransport: Sendable { … }
+public protocol TeleportChannelTransportFactory: Sendable { … }
 
-public protocol TeleportSessionMutex: Sendable {
-    func withLock<T>(_ body: () -> T) -> T
-}
-
-public protocol TeleportChannelTransport: Sendable {
-    func start() async throws -> Int32
-    func close() async
-    nonisolated func cancelPumpSync()
-}
-
-public protocol TeleportChannelTransportFactory: Sendable {
-    func makeChannelTransport(channel: OpaquePointer,
-                              outerSession: OpaquePointer?,
-                              mutex: any TeleportSessionMutex) -> any TeleportChannelTransport
-}
+public protocol TeleportHTTPClienting: AnyObject { … }
+public protocol TeleportGRPCClienting: AnyObject { … }
+public protocol BrowserMFACeremonyRunning: AnyObject { … }
+public protocol TeleportSSHKeyPairGenerating: AnyObject { … }
+public protocol TeleportTLSKeyPairGenerating: AnyObject { … }
+public protocol TeleportWebAuthnBuilding: AnyObject { … }
+public protocol TeleportSEPSigning: WebAuthnSigner, SEPKeySigning, AnyObject {}
 ```
 
-## Seam payload types
+Live defaults (public, constructible): `LiveTeleportSSHKeyPairGenerator`,
+`LiveTeleportTLSKeyPairGenerator`, `TeleportWebAuthnBuilder`.
+
+### Transports
 
 ```swift
-public struct TeleportClusterTLSState: Codable, Hashable, Sendable {
-    public let clusterName: String
-    public let clusterCAPEMs: [String]
-    public let hostCACheckingKeys: [String]
-    public init(clusterName: String, clusterCAPEMs: [String], hostCACheckingKeys: [String] = [])
+public actor SSHTLSTransport { … }                 // TLS+ALPN SSH bridge
+nonisolated public enum TeleportTLSTrust { … }     // chain/name/EKU/ALPN verification
+public enum TeleportProxySubsystem { … }
+
+public final class TeleportGRPCConnection: @unchecked Sendable {
+    public static func connect(host:port:clientCertPEM:privateKey:clusterName:clusterCAPEMs:logger:) async throws -> TeleportGRPCConnection
+    public func unary<R: SwiftProtobuf.Message, S: SwiftProtobuf.Message>(path:request:responseType:) async throws -> S
+    public func close() async throws
+    public func deleteKeychainIdentity()
 }
 
-public enum TeleportHostKeyUpdateResult: Equatable {
-    case updated
-    case rejectedWouldDropPinnedKeys
-    case noChange
-}
-
-public enum TeleportPackageError: Error, LocalizedError, Equatable {
-    case connectionFailed(String)
-    case keychain(OSStatus)
-}
+public enum GRPCError: Error, CustomStringConvertible, LocalizedError { … }
+public enum GRPCTLSOptions { … }
+public struct GRPCClientIdentity { … }
 ```
 
-## Transports
+### Domain + wire
 
 ```swift
-public actor SSHTLSTransport {
-    public static let alpnProtocol = "teleport-proxy-ssh"
-    public static let offeredALPNProtocols: [String]
-    public struct SocketPair: Sendable { public let libssh2FD: Int32; public let pumpFD: Int32 }
-    public init(host: String, port: Int, clusterName: String,
-                clusterCAPEMs: [String], logging: any TeleportLogging)
-    public static func makeTLSOptions(clusterName: String, clusterCAPEMs: [String],
-                                      dialHost: String, logger: Logger) throws -> NWProtocolTLS.Options
-    public static func makeSocketPair() throws -> SocketPair
-    public func connect() async throws -> Int32
-    public func close()
+public enum HostKeyTrustPolicy { public enum Decision { … }; public static func decide(…) -> Decision }
+public struct OpenSSHCertificate { public enum CertType; /* public fields */; public static func parse(…) }
+public enum OpenSSHHostCertVerifier { public static func verify(…) -> OpenSSHHostCertVerification }
+public enum TeleportIssuedCertValidator { public enum Failure; public static func validateIssuedUserCert(…); validateTLSCertBinding(…) }
+public enum TeleportWebAuthnRPID { public enum ResolveError; public static func resolve(serverProvided:cluster:) }
+public struct TeleportCluster { public init(…); public var sepKeyLabel }
+public struct TeleportCredential { public init(…); public var isCertValid }
+public enum TeleportDeviceReadiness { … }
+public struct TeleportDeviceReadinessResolver { public init(…); public func resolve(clusterId:now:) }
+public enum TeleportDeviceName { public static func `default`/sanitize/validate }
+public struct TeleportKeychainConfig: @unchecked Sendable { public init(keychainService:defaults:) }
+public enum TeleportHostKeyUpdatePolicy { public static func apply(…); matchesPinnedCluster(…) }
+public enum TeleportHostCACheckingKeysDecoder { … }
+
+public enum HeadlessID { public static func compute(sshAuthorizedKey:) -> String }
+public enum HeadlessError: LocalizedError { … }
+public struct HeadlessLoginReq: Encodable { public init(…) }
+public struct HeadlessLoginResponse: Decodable { public init(…); public struct TrustedCerts }
+public enum HeadlessLogin { public static var defaultSession; public static func post(…) }
+public enum TeleportTrustSession { public static let session: URLSession }
+public struct TLSKeyPair { public init(privateKey:publicKeyPEM:) }
+public enum TLSKeyPairGen { public static func generate() throws -> TLSKeyPair }
+public struct LoginBeginResponse: Decodable { public init(…); … }
+public struct LoginFinishResponse: Decodable { public init(…); … }
+public struct LoginFinishReq: Encodable { public init(…) }
+
+// WebAuthn / SEP
+public protocol WebAuthnSigner: AnyObject { … }
+public protocol SEPKeySigning { … }
+public enum SignerError: Error, LocalizedError, CustomStringConvertible { … }
+public enum CBOR { … }
+public enum SSHPubKey { public static func generateEd25519KeyPair(…) }
+public enum CeremonyType; public struct CollectedClientData; public struct AttestationData
+public struct CredentialData; public struct PublicKeyCredential; public struct AuthenticatorResponse
+public struct AuthenticatorAttestationResponse; public struct AuthenticatorAssertionResponse
+public struct CredentialCreationResponse; public struct CredentialAssertionResponse
+public func makeAttestationData(…) throws -> AttestationData
+public func coseEC2PublicKeyCBOR(publicKeyRaw:) throws -> Data
+public enum WebAuthn { public static func register(…)/login(…) }
+public final class SecureEnclaveSigner: WebAuthnSigner, SEPKeySigning { … }
+public final class SoftwareSigner: WebAuthnSigner { … }
+
+@MainActor public final class BrowserMFACeremony: NSObject {
+    public init(logging: any TeleportLogging, presenter: any BrowserMFAPresenting)
+    public func run(grpcClient: any TeleportGRPCClienting, host: String) async throws -> Proto_BrowserMFAResponse
 }
 
-public enum TeleportProxySubsystem {
-    public static func request(for nodeName: String, port: Int = 0, cluster: String? = nil) -> String
-}
-
-nonisolated public enum TeleportTLSTrust {
-    public static let clusterLocalName = "teleport.cluster.local"
-    public static func anchors(fromPEMs pems: [String]) -> [SecCertificate]
-    public static func pemToDER(pem: String, label: String) throws -> Data
-    public static func sshServerNames(dialHost: String) -> [String]
-    public static func authServerNames(clusterName: String) -> [String]
-    public static func encodedClusterName(_ name: String) -> String
-    public static func verify(trust: SecTrust, anchors: [SecCertificate], serverNames: [String],
-                              negotiatedALPN: String?, allowedALPNs: [String]) -> (ok: Bool, error: CFError?)
-    public static func certificateIsCA(_ certificate: SecCertificate) -> Bool
-    public static func certificateAllowsTLSServerUse(_ certificate: SecCertificate) -> Bool
-    public static func certificate(_ certificate: SecCertificate, matchesName name: String) -> Bool
-    public static func parseExtensions(der: Data) -> ParsedExtensions?
-    public static func makeVerifyBlock(anchors: [SecCertificate], serverNames: [String],
-                                       allowedALPNs: [String], logger: Logger) -> sec_protocol_verify_t
-    public static func negotiatedProtocol(from metadata: sec_protocol_metadata_t) -> String?
-    public struct ParsedExtensions { /* public fields */ }
-}
-
-public enum TeleportTLSTrustError: LocalizedError {
-    case malformedPEM(String)
-}
+// Generated protobuf (Visibility=Public): all Proto_* messages/enums.
 ```
 
-## Usage sketch
+## `TeleportAuth`
 
 ```swift
-import TeleportCore
+@MainActor public protocol TeleportBootstrapCoordinating: AnyObject, ObservableObject { … }
+@MainActor public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBootstrapCoordinating {
+    public init(httpClient:keyRing:safariPresenter:logging:signer:sshKeyPairGenerator:tlsKeyPairGenerator:now:)
+    public struct BootstrapResult { public init(…); /* public fields */ }
+    public func begin(cluster:) async; public func cancel() async; public func retry() async
+}
+public enum TeleportBootstrapState / TeleportBootstrapError { … }
 
-let subsystem = "com.example.app"
-let logging = DefaultTeleportLogging(subsystem: subsystem)
+@MainActor public protocol TeleportLoginCoordinating: AnyObject, ObservableObject { … }
+@MainActor public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoordinating { … }
+public enum TeleportLoginState / TeleportLoginError { … }
 
-let subsystemRequest = TeleportProxySubsystem.request(for: "node-1", port: 0, cluster: nil)
-// "proxy:node-1:0"
+@MainActor public protocol TeleportRegistrationCoordinating: AnyObject, ObservableObject { … }
+@MainActor public final class TeleportRegistrationCoordinator: ObservableObject, TeleportRegistrationCoordinating { … }
+public enum TeleportRegistrationState / TeleportRegistrationError { … }
 
-let transport = SSHTLSTransport(
-    host: "teleport.example.com", port: 443,
-    clusterName: "teleport.example.com",
-    clusterCAPEMs: caPEMs,
-    logging: logging
-)
-let fd = try await transport.connect()
-// hand `fd` to libssh2_session_handshake …
-await transport.close()
+@MainActor public final class TeleportKeyRing: ObservableObject, TeleportCredentialStore {
+    public init(signer:logging:config:)
+    @Published public private(set) var credentials: [UUID: TeleportCredential]
+    public func readiness(for:) -> TeleportDeviceReadiness
+    // + the TeleportCredentialStore witnesses
+}
+
+public struct TeleportHTTPClient { public init(baseURL:); public struct HeadlessLoginResult / LoginBeginResult; … }
 ```
 
-The non-`@testable` consumer test target
-(`Tests/TeleportCoreConsumerTests`) exercises exactly this surface.
+## `TeleportTesting`
+
+The 7 public mocks, UI-free and app-type-free: `MockSEPKeySigner` (`.success`,
+`.cancelled`, `.lockout`, `.notEnrolled`), `MockTeleportHTTPClient`,
+`MockTeleportKeyRing` (+ `Fixture`), `MockTeleportBootstrapCoordinator`
+(+ `Scenario`), `MockTeleportLoginCoordinator` (+ `Scenario`),
+`MockTeleportRegistrationCoordinator` (+ `Scenario`),
+`MockWebAuthenticationSessionPresenter`.
+
+`MockTeleportKeyRing` conforms only to `TeleportCredentialStore`; the host
+restores its `TeleportKeyRingStoring` observation conformance by extension in
+Phase 2.
+
+## Enforcement
+
+`Tests/TeleportCoreConsumerTests` is a non-`@testable` target: its
+`HostSurfaceCompileTests` mirrors the host's `TeleportComposition`,
+`TeleportLiveCoordinators`, `TeleportKeyRingStoring`,
+`TeleportKeyRingCredentialStore`, `SSHClient` host-key verification, and one
+iOS harness. A missing promotion fails that target instead of Phase 2.

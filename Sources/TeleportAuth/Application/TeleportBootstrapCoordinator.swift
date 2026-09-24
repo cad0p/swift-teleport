@@ -344,7 +344,7 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         postTask?.cancel()
         postTask = nil
         #if canImport(AuthenticationServices)
-        await safariPresenter?.cancel()
+        safariPresenter?.cancel()
         #endif
         state = .failed(.userCancelled)
     }
@@ -354,7 +354,7 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         postTask?.cancel()
         postTask = nil
         #if canImport(AuthenticationServices)
-        await safariPresenter?.cancel()
+        safariPresenter?.cancel()
         #endif
         state = .idle
         // The caller (the bootstrap sheet) re-invokes begin() with the
@@ -504,7 +504,7 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
 
         // Dismiss the Safari sheet (the POST returned, the user is done).
         #if canImport(AuthenticationServices)
-        await safariPresenter?.cancel()
+        safariPresenter?.cancel()
         #endif
     }
 
@@ -577,7 +577,7 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
 
         // Dismiss the Safari sheet on failure too.
         #if canImport(AuthenticationServices)
-        await safariPresenter?.cancel()
+        safariPresenter?.cancel()
         #endif
     }
 }

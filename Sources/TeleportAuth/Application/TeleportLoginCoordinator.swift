@@ -162,14 +162,12 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         // Load the SEP key from the Secure Enclave. If the key was deleted
         // (e.g. the user wiped the device), loadKey returns nil and we
         // surface a "no registered key" error (the user must re-run Phase 2).
-        let secKey: SecKey
         do {
-            guard let key = try signer.loadKey(credentialID: credentialID) else {
+            guard try signer.loadKey(credentialID: credentialID) != nil else {
                 logger.error("SEP key not in keychain (credID=\(credentialID.base64URLEncodedString().prefix(16))…)")
                 state = .failed(.noRegisteredKey)
                 return
             }
-            secKey = key
         } catch {
             logger.error("loadKey failed: \(error.localizedDescription, privacy: .public)")
             state = .failed(.faceIDUnavailable("SEP key load failed: \(error.localizedDescription)"))

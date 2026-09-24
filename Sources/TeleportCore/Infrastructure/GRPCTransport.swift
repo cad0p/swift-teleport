@@ -18,6 +18,7 @@
 
 #if canImport(Network)
 import NIOCore
+import NIOConcurrencyHelpers
 import NIOTransportServices
 import NIOHTTP2
 import SwiftProtobuf
@@ -395,6 +396,8 @@ public enum GRPCTLSOptions {
 ///
 /// Created with a Phase 1 TLS cert. Use `unary(...)` to make gRPC calls.
 public final class TeleportGRPCConnection: @unchecked Sendable {
+
+    nonisolated deinit {}
     private let channel: Channel
     private let multiplexer: NIOHTTP2Handler.StreamMultiplexer
     private let authority: String
@@ -440,7 +443,7 @@ public final class TeleportGRPCConnection: @unchecked Sendable {
         )
 
         let group = NIOTSEventLoopGroup()
-        var capturedMultiplexer: NIOHTTP2Handler.StreamMultiplexer?
+        let capturedMultiplexer = NIOLockedValueBox<NIOHTTP2Handler.StreamMultiplexer?>(nil)
         let bootstrap = NIOTSConnectionBootstrap(group: group)
             .tlsOptions(tlsOpts)
             .channelInitializer { channel in
@@ -455,7 +458,7 @@ public final class TeleportGRPCConnection: @unchecked Sendable {
                     ) { streamChannel in
                         streamChannel.eventLoop.makeSucceededFuture(())
                     }.map { multiplexer -> Void in
-                        capturedMultiplexer = multiplexer
+                        capturedMultiplexer.withLockedValue { $0 = multiplexer }
                     }
                 }
             }
@@ -469,7 +472,7 @@ public final class TeleportGRPCConnection: @unchecked Sendable {
             try? await group.shutdownGracefully()
             throw error
         }
-        guard let multiplexer = capturedMultiplexer else {
+        guard let multiplexer = capturedMultiplexer.withLockedValue({ $0 }) else {
             identity.deleteKeychainItems(logger: logger)
             try? await group.shutdownGracefully()
             throw GRPCError.transport("HTTP/2 multiplexer not captured")
@@ -522,7 +525,7 @@ public final class TeleportGRPCConnection: @unchecked Sendable {
 
 /// Logs TLS handshake + connection errors with the real underlying NWError,
 /// so Phase 2 failures aren't opaque 'ChannelError error 0'.
-final class GRPCConnectionStateHandler: ChannelInboundHandler, @unchecked Sendable {
+nonisolated final class GRPCConnectionStateHandler: ChannelInboundHandler, @unchecked Sendable {
     typealias InboundIn = Any
     private let host: String
     private let logger: Logger
