@@ -135,3 +135,7 @@ extension SoftwareSigner: SEPKeySigning {
         return signature as Data
     }
 }
+
+// MARK: - TeleportSEPSigning
+
+extension SoftwareSigner: TeleportSEPSigning {}
