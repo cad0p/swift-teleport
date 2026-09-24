@@ -27,18 +27,18 @@
 
 import Foundation
 
-public enum CBOR {
+package enum CBOR {
     // MARK: - Head encoders
 
     /// Encode an unsigned integer in the smallest CBOR form.
-    public static func encodeUint(_ value: UInt64) -> Data {
+    package static func encodeUint(_ value: UInt64) -> Data {
         return encodeHead(majorType: 0, argument: value)
     }
 
     /// Encode a signed integer. Uses the smallest form: small negatives
     /// (−1..−24) become a single-byte head (major type 1, arg 0..23);
     /// larger negatives use the smallest additional-byte form.
-    public static func encodeInt(_ value: Int64) -> Data {
+    package static func encodeInt(_ value: Int64) -> Data {
         if value >= 0 {
             return encodeHead(majorType: 0, argument: UInt64(value))
         } else {
@@ -73,12 +73,12 @@ public enum CBOR {
     // MARK: - Value encoders
 
     /// Encode a byte string (CBOR major type 2).
-    public static func encodeByteString(_ data: Data) -> Data {
+    package static func encodeByteString(_ data: Data) -> Data {
         return encodeHead(majorType: 2, argument: UInt64(data.count)) + data
     }
 
     /// Encode a UTF-8 text string (CBOR major type 3).
-    public static func encodeString(_ s: String) -> Data {
+    package static func encodeString(_ s: String) -> Data {
         let utf8 = Data(s.utf8)
         return encodeHead(majorType: 3, argument: UInt64(utf8.count)) + utf8
     }
@@ -86,7 +86,7 @@ public enum CBOR {
     /// Encode `true` (0xF5) or `false` (0xF4). CTAP2 canonical form uses
     /// major type 7, simplified bool. (Not used in the packed format, but
     /// included for completeness if `attStmt` ever carries bools.)
-    public static func encodeBool(_ b: Bool) -> Data {
+    package static func encodeBool(_ b: Bool) -> Data {
         return Data([b ? 0xF5 : 0xF4])
     }
 
@@ -101,7 +101,7 @@ public enum CBOR {
     ///
     /// Callers must pre-encode keys and values with `encodeInt`,
     /// `encodeString`, `encodeByteString`, etc.
-    public static func encodeMap(items: [(Data, Data)]) -> Data {
+    package static func encodeMap(items: [(Data, Data)]) -> Data {
         let sorted = items.sorted { lhs, rhs in
             // Length-first, then bytewise lexicographic. This matches
             // fxamacker/cbor's default canonical ordering (CanonicalCBORMode
@@ -122,7 +122,7 @@ public enum CBOR {
 
 // MARK: - base64url helpers (no padding)
 
-nonisolated public extension Data {
+nonisolated package extension Data {
     /// base64url without padding — mirrors Go's base64.RawURLEncoding.
     func base64URLEncodedString() -> String {
         var s = self.base64EncodedString()

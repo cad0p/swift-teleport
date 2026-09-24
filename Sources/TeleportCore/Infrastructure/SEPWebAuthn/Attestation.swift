@@ -123,7 +123,7 @@ public struct CredentialData {
 ///     client data).
 ///   - cred: the credential to attest (required for `.create`, ignored for
 ///     `.get`).
-public func makeAttestationData(
+package func makeAttestationData(
     ceremony: CeremonyType,
     origin: String,
     rpID: String,
@@ -179,7 +179,7 @@ public func makeAttestationData(
 ///   coordinates up to 32 bytes (left-zero-padded here).
 /// - Throws: `SignerError.invalidPublicKey` for a wrong prefix, an even
 ///   total length, or coordinates longer than 32 bytes.
-public func coseEC2PublicKeyCBOR(publicKeyRaw: Data) throws -> Data {
+package func coseEC2PublicKeyCBOR(publicKeyRaw: Data) throws -> Data {
     guard let prefix = publicKeyRaw.first, prefix == 0x04 else {
         throw SignerError.invalidPublicKey("expected an X9.63 uncompressed point (0x04 prefix)")
     }

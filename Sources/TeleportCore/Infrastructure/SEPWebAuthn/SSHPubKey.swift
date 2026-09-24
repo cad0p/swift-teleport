@@ -27,13 +27,13 @@
 import Foundation
 import CryptoKit
 
-public enum SSHPubKey {
+package enum SSHPubKey {
     /// Generate a fresh ed25519 keypair and return the OpenSSH authorized_keys
     /// string for the public key.
     ///
     /// - Parameter comment: the comment field (defaults to "sep-spike").
     /// - Returns: e.g. `"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... sep-spike"`
-    public static func generateEd25519AuthorizedKeys(comment: String = "sep-spike") -> String {
+    package static func generateEd25519AuthorizedKeys(comment: String = "sep-spike") -> String {
         let priv = Curve25519.Signing.PrivateKey()
         let pub = priv.publicKey.rawRepresentation  // 32 bytes
 
@@ -59,7 +59,7 @@ public enum SSHPubKey {
     ///
     /// - Parameter comment: the comment field (defaults to "sep-spike").
     /// - Returns: a tuple of (authorized_keys public string, OpenSSH PEM private key string).
-    public static func generateEd25519KeyPair(comment: String = "sep-spike") -> (publicKey: String, privateKeyPEM: String) {
+    package static func generateEd25519KeyPair(comment: String = "sep-spike") -> (publicKey: String, privateKeyPEM: String) {
         let priv = Curve25519.Signing.PrivateKey()
         let pub = priv.publicKey.rawRepresentation  // 32 bytes
         let privRaw = priv.rawRepresentation           // 32 bytes

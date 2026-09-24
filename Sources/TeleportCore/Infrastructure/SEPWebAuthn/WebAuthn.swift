@@ -118,11 +118,11 @@ public struct CredentialAssertionResponse: Codable {
 // MARK: - Builder
 
 /// Builds the registration and assertion responses.
-public enum WebAuthn {
+package enum WebAuthn {
 
     /// Builds a registration response, signing the create-ceremony message
     /// with `signer`.
-    public static func register(
+    package static func register(
         origin: String,
         rpID: String,
         challenge: Data,
@@ -160,7 +160,7 @@ public enum WebAuthn {
 
     /// Builds an assertion response, signing the get-ceremony message with
     /// `signer`.
-    public static func login(
+    package static func login(
         origin: String,
         rpID: String,
         challenge: Data,
@@ -194,7 +194,7 @@ public enum WebAuthn {
     }
 
     /// Encodes the `packed` attestation object CBOR.
-    public static func buildAttestationObjectCBOR(authData: Data, signature: Data) -> Data {
+    package static func buildAttestationObjectCBOR(authData: Data, signature: Data) -> Data {
         let attestationStatement = CBOR.encodeMap(items: [
             (CBOR.encodeString("alg"), CBOR.encodeInt(-7)),
             (CBOR.encodeString("sig"), CBOR.encodeByteString(signature)),

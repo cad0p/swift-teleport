@@ -65,6 +65,10 @@ protocol HostTeleportKeyRingStoring: AnyObject, ObservableObject {
 
 extension TeleportKeyRing: HostTeleportKeyRingStoring {}
 
+// The Phase 2 host restores this conformance by extension too; a regression
+// that drops a required `public` method from the mock fails the gate here.
+extension MockTeleportKeyRing: HostTeleportKeyRingStoring {}
+
 // MARK: - Mirror: host `TeleportKeyRingCredentialStore` adapter
 
 /// The host's `nonisolated` adapter from the actor-side
@@ -372,6 +376,13 @@ final class HostWebAuthenticationSessionPresenter: NSObject, WebAuthenticationSe
 
 @MainActor
 enum HostCompositionMirror {
+    /// The host composition constructs `SecureEnclaveSigner()` inline in every
+    /// factory; naming it here keeps the `public` promotion pinned by this
+    /// build.
+    static func makeSigner() -> SecureEnclaveSigner {
+        SecureEnclaveSigner()
+    }
+
     static func makeBootstrapCoordinator(
         keyRing: any TeleportCredentialStore,
         logging: any TeleportLogging,
@@ -472,25 +483,6 @@ enum HostSSHClientMirror {
         _ = OpenSSHHostCertVerification.verified
     }
 
-    static func validateIssuedCert(
-        certPEM: String,
-        publicKeyBlob: Data,
-        tlsCertPEM: String,
-        privateKey: SecKey
-    ) {
-        _ = TeleportIssuedCertValidator.validateIssuedUserCert(
-            certPEM,
-            expectedPublicKeyBlob: publicKeyBlob,
-            requestedTTL: 3600,
-            now: Date()
-        )
-        _ = TeleportIssuedCertValidator.validateTLSCertBinding(tlsCertPEM, expectedPrivateKey: privateKey)
-        _ = TeleportWebAuthnRPID.resolve(
-            serverProvided: "teleport.example.com",
-            cluster: TeleportCluster(host: "teleport.example.com", username: "pier")
-        )
-    }
-
     static func clusterAndDeviceModels() {
         let cluster = TeleportCluster(
             id: UUID(),
@@ -514,46 +506,8 @@ enum HostSSHClientMirror {
             deviceName: "vvterm-pier"
         )
         _ = credential.isCertValid
-        _ = TeleportDeviceReadinessResolver(
-            hasBootstrapCert: { _ in true },
-            hasSEPKey: { _ in true },
-            certExpiry: { _ in Date().addingTimeInterval(3600) },
-            hasHostCAKeys: { _ in true }
-        ).resolve(clusterId: cluster.id)
         _ = TeleportHostKeyUpdatePolicy.apply(checkingKeys: [], to: TeleportClusterTLSState(clusterName: "c", clusterCAPEMs: []))
         _ = TeleportHostCACheckingKeysDecoder.decode("")
-    }
-
-    static func webAuthnAndKeys() throws {
-        _ = HeadlessID.compute(sshAuthorizedKey: "ssh-ed25519 AAAA")
-        let pair = try TLSKeyPairGen.generate()
-        _ = pair.tlsPubKeyB64
-        _ = TLSKeyPair(privateKey: pair.privateKey, publicKeyPEM: pair.publicKeyPEM)
-        let sshPair = SSHPubKey.generateEd25519KeyPair(comment: "host-surface")
-        _ = sshPair.publicKey
-        _ = sshPair.privateKeyPEM
-        let signer = SoftwareSigner()
-        let created = try signer.createKey()
-        _ = try signer.createKey(credentialID: created.credentialID)
-        _ = try signer.loadKey(credentialID: created.credentialID)
-        _ = try signer.sign(message: Data([1, 2, 3]), credentialID: created.credentialID)
-        _ = SecureEnclaveSigner()
-        _ = try WebAuthn.register(
-            origin: "https://teleport.example.com",
-            rpID: "teleport.example.com",
-            challenge: Data([1, 2, 3]),
-            credentialID: created.credentialID,
-            publicKeyRaw: created.publicKeyRaw,
-            signer: signer
-        )
-        _ = try WebAuthn.login(
-            origin: "https://teleport.example.com",
-            rpID: "teleport.example.com",
-            challenge: Data([1, 2, 3]),
-            credentialID: created.credentialID,
-            userHandle: nil,
-            signer: signer
-        )
     }
 
     static func gRPCErrorShapes() {

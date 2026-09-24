@@ -38,13 +38,13 @@ public protocol WebAuthnSigner: AnyObject {
 /// `LocalizedError` so `error.localizedDescription` carries the wrapped
 /// system message (the login coordinator maps Face ID cancel/lockout/
 /// not-enrolled from those substrings).
-public enum SignerError: Error, LocalizedError, CustomStringConvertible {
+package enum SignerError: Error, LocalizedError, CustomStringConvertible {
     case keyCreationFailed(String)
     case keyNotFound
     case signingFailed(String)
     case invalidPublicKey(String)
 
-    public var description: String {
+    package var description: String {
         switch self {
         case .keyCreationFailed(let message):
             return "key creation failed: \(message)"
@@ -57,7 +57,7 @@ public enum SignerError: Error, LocalizedError, CustomStringConvertible {
         }
     }
 
-    public var errorDescription: String? { description }
+    package var errorDescription: String? { description }
 }
 
 /// Generates a fresh 32-byte credential id.

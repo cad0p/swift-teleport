@@ -37,25 +37,25 @@ public enum TeleportDeviceReadiness: Equatable {
 
 /// Pure function to compute readiness from keychain state.
 /// The keychain queries are injected so this is unit-testable without a real keychain.
-public struct TeleportDeviceReadinessResolver {
+package struct TeleportDeviceReadinessResolver {
     /// Returns true if a Phase-1 bootstrap cert exists for this cluster.
-    public typealias HasBootstrapCert = (UUID) -> Bool
+    package typealias HasBootstrapCert = (UUID) -> Bool
     /// Returns true if a SEP key is registered for this cluster.
-    public typealias HasSEPKey = (UUID) -> Bool
+    package typealias HasSEPKey = (UUID) -> Bool
     /// Returns the live cert's ValidBefore, or nil if no cert.
-    public typealias CertExpiry = (UUID) -> Date?
+    package typealias CertExpiry = (UUID) -> Date?
     /// Returns true if Host CA checking keys are persisted for this cluster.
     /// Missing keys on an otherwise-registered device route to `.needsLogin`
     /// (the login response refreshes them) — legacy installs never capture
     /// checking keys until their next login.
-    public typealias HasHostCAKeys = (UUID) -> Bool
+    package typealias HasHostCAKeys = (UUID) -> Bool
 
-    public let hasBootstrapCert: HasBootstrapCert
-    public let hasSEPKey: HasSEPKey
-    public let certExpiry: CertExpiry
-    public let hasHostCAKeys: HasHostCAKeys
+    package let hasBootstrapCert: HasBootstrapCert
+    package let hasSEPKey: HasSEPKey
+    package let certExpiry: CertExpiry
+    package let hasHostCAKeys: HasHostCAKeys
 
-    public init(
+    package init(
         hasBootstrapCert: @escaping HasBootstrapCert,
         hasSEPKey: @escaping HasSEPKey,
         certExpiry: @escaping CertExpiry,
@@ -67,7 +67,7 @@ public struct TeleportDeviceReadinessResolver {
         self.hasHostCAKeys = hasHostCAKeys
     }
 
-    public func resolve(clusterId: UUID, now: Date = Date()) -> TeleportDeviceReadiness {
+    package func resolve(clusterId: UUID, now: Date = Date()) -> TeleportDeviceReadiness {
         guard hasBootstrapCert(clusterId) else { return .needsBootstrap }
         guard hasSEPKey(clusterId) else { return .needsRegistration }
         guard hasHostCAKeys(clusterId) else { return .needsLogin }

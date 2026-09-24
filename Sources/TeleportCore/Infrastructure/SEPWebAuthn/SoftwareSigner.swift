@@ -30,14 +30,14 @@ import CryptoKit
 /// Software P-256 signer. Holds keys in-memory in a dictionary keyed by the
 /// credential ID. The credential ID is a random 32-byte value generated at
 /// `createKey` time (no persistence — the spike re-creates per run).
-public final class SoftwareSigner: WebAuthnSigner {
+package final class SoftwareSigner: WebAuthnSigner {
     // Explicit nonisolated deinit: the compiler-synthesized deinit of a
     // MainActor-isolated class takes the back-deployed isolated-deinit path,
     // which aborts (invalid free) when released outside a task context —
     // swiftlang/swift#85663, #88036. Empty body, no behavior change.
     nonisolated deinit {}
 
-    public let label = "software"
+    package let label = "software"
 
     /// The credential ID → SecKey map (mirrors `SecureEnclaveSigner.keys`).
     /// Populated by `createKey(credentialID:)`; `loadKey` returns the cached
@@ -46,11 +46,11 @@ public final class SoftwareSigner: WebAuthnSigner {
     private var keys: [Data: SecKey] = [:]
     private let queue = DispatchQueue(label: "sep-webauthn.software-signer")
 
-    public init() {}
+    package init() {}
 
     // MARK: - WebAuthnSigner (builder-facing)
 
-    public func createKey() throws -> (credentialID: Data, publicKeyRaw: Data) {
+    package func createKey() throws -> (credentialID: Data, publicKeyRaw: Data) {
         let credentialID = newCredentialID()
         let secKey = try createKey(credentialID: credentialID)
 
@@ -72,7 +72,7 @@ public final class SoftwareSigner: WebAuthnSigner {
         return (credentialID, publicKeyData as Data)
     }
 
-    public func sign(message: Data, credentialID: Data) throws -> Data {
+    package func sign(message: Data, credentialID: Data) throws -> Data {
         // Pre-hash the message with SHA-256, then sign the DIGEST with the
         // *Digest* variant (NOT *Message*). Same convention as
         // `SecureEnclaveSigner` — the server computes sha256(message) once
@@ -89,7 +89,7 @@ public final class SoftwareSigner: WebAuthnSigner {
 // MARK: - SEPKeySigning
 
 extension SoftwareSigner: SEPKeySigning {
-    public func createKey(credentialID: Data) throws -> SecKey {
+    package func createKey(credentialID: Data) throws -> SecKey {
         // A plain software EC P-256 key: no kSecAttrTokenIDSecureEnclave
         // (the Secure Enclave is absent on simulators and Linux CI), no
         // .biometryAny access control (no Face ID prompt). This mirrors the
@@ -113,13 +113,13 @@ extension SoftwareSigner: SEPKeySigning {
         return privateKey
     }
 
-    public func loadKey(credentialID: Data) throws -> SecKey? {
+    package func loadKey(credentialID: Data) throws -> SecKey? {
         // In-memory lookup: nil for "never created in this instance" —
         // mirrors the real signer's errSecItemNotFound → nil behavior.
         queue.sync { keys[credentialID] }
     }
 
-    public func sign(digest: Data, with key: SecKey) throws -> Data {
+    package func sign(digest: Data, with key: SecKey) throws -> Data {
         var error: Unmanaged<CFError>?
         guard let signature = SecKeyCreateSignature(
             key,

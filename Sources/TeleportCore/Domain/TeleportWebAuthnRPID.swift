@@ -27,16 +27,16 @@
 
 import Foundation
 
-public enum TeleportWebAuthnRPID {
+package enum TeleportWebAuthnRPID {
 
     /// A rejected server-provided RP ID.
-    public enum ResolveError: Error, Equatable, LocalizedError {
+    package enum ResolveError: Error, Equatable, LocalizedError {
         /// The cluster has no usable configured RP ID (empty host + rpID).
         case missingExpected
         /// The server provided an RP ID that is not the configured one.
         case mismatch(serverProvided: String, expected: String)
 
-        public var errorDescription: String? {
+        package var errorDescription: String? {
             switch self {
             case .missingExpected:
                 return "no configured WebAuthn rpID for this cluster"
@@ -54,7 +54,7 @@ public enum TeleportWebAuthnRPID {
     ///   - cluster: the configured cluster (host + optional custom rpID).
     /// - Returns: the configured RP ID on success; a `ResolveError` when
     ///   the server value disagrees or the cluster has no expected value.
-    public static func resolve(
+    package static func resolve(
         serverProvided: String?,
         cluster: TeleportCluster
     ) -> Result<String, ResolveError> {

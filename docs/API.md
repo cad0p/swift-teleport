@@ -67,12 +67,9 @@ public struct GRPCClientIdentity { … }
 public enum HostKeyTrustPolicy { public enum Decision { … }; public static func decide(…) -> Decision }
 public struct OpenSSHCertificate { public enum CertType; /* public fields */; public static func parse(…) }
 public enum OpenSSHHostCertVerifier { public static func verify(…) -> OpenSSHHostCertVerification }
-public enum TeleportIssuedCertValidator { public enum Failure; public static func validateIssuedUserCert(…); validateTLSCertBinding(…) }
-public enum TeleportWebAuthnRPID { public enum ResolveError; public static func resolve(serverProvided:cluster:) }
 public struct TeleportCluster { public init(…); public var sepKeyLabel }
 public struct TeleportCredential { public init(…); public var isCertValid }
 public enum TeleportDeviceReadiness { … }
-public struct TeleportDeviceReadinessResolver { public init(…); public func resolve(clusterId:now:) }
 public enum TeleportDeviceName { public static func `default`/sanitize/validate }
 public struct TeleportKeychainConfig: @unchecked Sendable { public init(keychainService:defaults:) }
 public enum TeleportHostKeyUpdatePolicy { public static func apply(…); matchesPinnedCluster(…) }
@@ -85,7 +82,6 @@ public struct HeadlessLoginResponse: Decodable { public init(…); public struct
 public enum HeadlessLogin { public static var defaultSession; public static func post(…) }
 public enum TeleportTrustSession { public static let session: URLSession }
 public struct TLSKeyPair { public init(privateKey:publicKeyPEM:) }
-public enum TLSKeyPairGen { public static func generate() throws -> TLSKeyPair }
 public struct LoginBeginResponse: Decodable { public init(…); … }
 public struct LoginFinishResponse: Decodable { public init(…); … }
 public struct LoginFinishReq: Encodable { public init(…) }
@@ -93,26 +89,45 @@ public struct LoginFinishReq: Encodable { public init(…) }
 // WebAuthn / SEP
 public protocol WebAuthnSigner: AnyObject { … }
 public protocol SEPKeySigning { … }
-public enum SignerError: Error, LocalizedError, CustomStringConvertible { … }
-public enum CBOR { … }
-public enum SSHPubKey { public static func generateEd25519KeyPair(…) }
 public enum CeremonyType; public struct CollectedClientData; public struct AttestationData
 public struct CredentialData; public struct PublicKeyCredential; public struct AuthenticatorResponse
 public struct AuthenticatorAttestationResponse; public struct AuthenticatorAssertionResponse
 public struct CredentialCreationResponse; public struct CredentialAssertionResponse
-public func makeAttestationData(…) throws -> AttestationData
-public func coseEC2PublicKeyCBOR(publicKeyRaw:) throws -> Data
-public enum WebAuthn { public static func register(…)/login(…) }
 public final class SecureEnclaveSigner: WebAuthnSigner, SEPKeySigning { … }
-public final class SoftwareSigner: WebAuthnSigner { … }
 
 @MainActor public final class BrowserMFACeremony: NSObject {
     public init(logging: any TeleportLogging, presenter: any BrowserMFAPresenting)
     public func run(grpcClient: any TeleportGRPCClienting, host: String) async throws -> Proto_BrowserMFAResponse
 }
+public enum BrowserMFACeremonyError: Error, LocalizedError { public var errorDescription: String? }
 
 // Generated protobuf (Visibility=Public): all Proto_* messages/enums.
 ```
+
+### Package-internal (`package`, not host-visible)
+
+These are reachable from every target inside this package (the coordinators,
+`TeleportTesting`, and the test targets) but deliberately not `public`: no
+Phase 2 host file names them, and a `public` surface they do not need would
+freeze them against future refactors.
+
+```swift
+package enum TeleportIssuedCertValidator { package enum Failure; … }
+package enum TeleportWebAuthnRPID { package enum ResolveError; … }
+package struct TeleportDeviceReadinessResolver { … }
+package enum TLSKeyPairGen { package static func generate() throws -> TLSKeyPair }
+package enum SignerError: Error, LocalizedError, CustomStringConvertible { … }
+package enum CBOR { … }
+package enum SSHPubKey { … }
+package func makeAttestationData(…) throws -> AttestationData
+package func coseEC2PublicKeyCBOR(publicKeyRaw:) throws -> Data
+package enum WebAuthn { package static func register(…)/login(…) }
+package final class SoftwareSigner: WebAuthnSigner { … }
+```
+
+Note: the host-side `TeleportServerIntegrationTests` (kept host-side) builds a
+`SoftwareSigner` today; Phase 2 either injects a `TeleportTesting` mock there
+or promotes `SoftwareSigner` into `TeleportTesting`.
 
 ## `TeleportAuth`
 

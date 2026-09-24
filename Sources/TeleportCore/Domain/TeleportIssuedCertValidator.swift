@@ -17,9 +17,9 @@
 import Foundation
 import Security
 
-public enum TeleportIssuedCertValidator {
+package enum TeleportIssuedCertValidator {
 
-    public enum Failure: Error, Equatable, LocalizedError {
+    package enum Failure: Error, Equatable, LocalizedError {
         /// The returned string is not an OpenSSH SSH certificate.
         case notAnSSHCertificate
         /// The certificate is a host certificate, not a user certificate.
@@ -35,7 +35,7 @@ public enum TeleportIssuedCertValidator {
         /// The `tls_cert` public key does not match the generated TLS key.
         case tlsPublicKeyMismatch
 
-        public var errorDescription: String? {
+        package var errorDescription: String? {
             switch self {
             case .notAnSSHCertificate:
                 return "issued cert is not an OpenSSH SSH certificate"
@@ -65,7 +65,7 @@ public enum TeleportIssuedCertValidator {
     ///   - now: the client clock (injectable for tests).
     ///   - clockSkew: tolerance applied to the TTL upper bound (Teleport may
     ///     backdate/shorten certs; hosts clocks drift).
-    public static func validateIssuedUserCert(
+    package static func validateIssuedUserCert(
         _ certPEM: String,
         expectedPublicKeyBlob: Data,
         requestedTTL: TimeInterval,
@@ -106,7 +106,7 @@ public enum TeleportIssuedCertValidator {
     /// - Parameters:
     ///   - tlsCertPEM: the PEM TLS certificate from the bootstrap response.
     ///   - expectedPrivateKey: the generated bootstrap TLS private key.
-    public static func validateTLSCertBinding(
+    package static func validateTLSCertBinding(
         _ tlsCertPEM: String,
         expectedPrivateKey: SecKey
     ) -> Failure? {

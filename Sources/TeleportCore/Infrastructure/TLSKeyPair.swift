@@ -62,14 +62,14 @@ nonisolated public struct TLSKeyPair {
     }
 }
 
-public enum TLSKeyPairGen {
+package enum TLSKeyPairGen {
 
     /// Generate a fresh EC P-256 keypair via SecKeyCreateRandomKey.
     ///
     /// Uses the system Security framework (not CryptoKit) so the resulting
     /// SecKey can be passed directly to sec_protocol_options_set_local_identity
     /// without any format conversion.
-    public static func generate() throws -> TLSKeyPair {
+    package static func generate() throws -> TLSKeyPair {
         // Software EC P-256 key (not SEP — the TLS key is a transport key,
         // not a biometric-gated credential).
         let attributes: [String: Any] = [
@@ -104,7 +104,7 @@ public enum TLSKeyPairGen {
 
     /// Wrap DER bytes in a PEM block: "-----BEGIN <label>-----\n<base64>\n-----END <label>-----\n"
     /// with 64-char lines (matching Go's pem.EncodeToMemory).
-    public static func pemWrap(der: Data, label: String) -> String {
+    package static func pemWrap(der: Data, label: String) -> String {
         let b64 = der.base64EncodedString()
         var lines: [String] = []
         lines.append("-----BEGIN \(label)-----")
