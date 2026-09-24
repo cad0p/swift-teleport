@@ -14,7 +14,7 @@
 //  The parallel agent's concrete Infrastructure types conform to these
 //  protocols:
 //    - `TeleportHTTPClient`        → `TeleportHTTPClienting`
-//    - `TeleportGRPCClient`        → `TeleportGRPCClienting`
+//    - `TeleportGRPCConnection`    → `TeleportGRPCClienting`
 //    - `BrowserMFACeremony`        → `BrowserMFACeremonyRunning`
 //    - `ASWebAuthenticationSession`→ `WebAuthenticationSessionPresenting`
 //
@@ -80,8 +80,8 @@ public protocol TeleportHTTPClienting: AnyObject {
 /// the auth ALPN route (`teleport-auth@<hex(cluster)>.teleport.cluster.local`)
 /// with mTLS using the Phase-1 cert.
 ///
-/// The concrete `TeleportGRPCClient` (ported by the parallel agent) wraps
-/// the spike's `TeleportGRPCConnection` + the proto RPCs.
+/// The concrete `TeleportGRPCConnection` (ported by the parallel agent)
+/// wraps the spike's NIO channel + the proto RPCs.
 public protocol TeleportGRPCClienting: AnyObject {
     /// Connect to the auth service with the Phase-1 cert (mTLS).
     /// Called once per Phase-2 run; the connection is closed on completion.

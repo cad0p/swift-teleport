@@ -234,22 +234,3 @@ func grpcUnaryCallTyped<R: SwiftProtobuf.Message, S: SwiftProtobuf.Message>(
     let (_, proto) = try grpcDecodeFrame(frame)
     return try S(serializedBytes: proto)
 }
-
-// MARK: - Timeout helper
-
-func withTimeout<T: Sendable>(_ future: EventLoopFuture<T>, seconds: Int64) async throws -> T {
-    return try await withThrowingTaskGroup(of: T.self) { group in
-        group.addTask {
-            try await future.get()
-        }
-        group.addTask {
-            try await Task.sleep(nanoseconds: UInt64(seconds) * 1_000_000_000)
-            throw GRPCError.timeout
-        }
-        guard let result = try await group.next() else {
-            throw GRPCError.timeout
-        }
-        group.cancelAll()
-        return result
-    }
-}

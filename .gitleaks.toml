@@ -1,0 +1,10 @@
+title = "swift-teleport Gitleaks Config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test-only loopback TLS identity + certs for the Teleport TLS trust tests (no production secret)."
+paths = [
+  '''^Tests/[^/]+/Fixtures/loopback-tls/''',
+]

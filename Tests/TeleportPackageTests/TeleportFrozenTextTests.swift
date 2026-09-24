@@ -111,7 +111,7 @@ nonisolated final class TeleportFrozenTextTests: XCTestCase {
     func testListenerInitDefaultsReferenceTheFrozenStatics() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // TeleportFrozenTextTests.swift
-            .deletingLastPathComponent()  // TeleportAuthTests/
+            .deletingLastPathComponent()  // TeleportPackageTests/
             .deletingLastPathComponent()  // Tests/
         let source = try String(
             contentsOf: repositoryRoot

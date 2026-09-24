@@ -68,9 +68,9 @@ nonisolated final class FixtureTests: XCTestCase {
 
     @MainActor
     private func fixtureBaseURL() -> URL {
-        // This test file lives at Tests/TeleportAuthTests/SEPWebAuthn/.
+        // This test file lives at Tests/TeleportPackageTests/SEPWebAuthn/.
         // The 8 Go-generated fixtures are committed beside it under
-        // Tests/TeleportAuthTests/Fixtures/SEPWebAuthn/.
+        // Tests/TeleportPackageTests/Fixtures/SEPWebAuthn/.
         return URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // remove FixtureTests.swift
             .deletingLastPathComponent()  // remove SEPWebAuthn/
@@ -86,7 +86,7 @@ nonisolated final class FixtureTests: XCTestCase {
         guard let data = try? Data(contentsOf: url) else {
             XCTFail(
                 "Missing fixture \(name) at \(url.path). The fixture oracle is "
-                + "committed under Tests/TeleportAuthTests/Fixtures/SEPWebAuthn/ "
+                + "committed under Tests/TeleportPackageTests/Fixtures/SEPWebAuthn/ "
                 + "(copied from the host's spikes/sep-webauthn/fixtures/expected/). "
                 + "An absent fixture is a hard failure, never a skip."
             )

@@ -131,13 +131,17 @@ byte-reproducible against the committed `.pb.swift`.
 ## Fixtures
 
 `Tests/TeleportCoreTests/Fixtures/` (v0.1.0) and
-`Tests/TeleportAuthTests/Fixtures/` (v0.2.0) carry test-only, generated,
-public material: OpenSSH CA/host/user certs + keys, generated loopback TLS
-identities (PKCS#12 + PEM) with the well-known test password, captured public
-certificate chains, and the **8 Go-generated SEP/WebAuthn fixtures**
-(`client_data_{create,get}.json`, `auth_data_{create,get}.bin`,
-`cose_pubkey.cbor`, `pub_key_raw.bin`, `signature_create.der`,
-`attestation_object_create.cbor`).
+`Tests/TeleportPackageTests/Fixtures/` (v0.2.0) carry test-only, generated,
+public material. The Core tree is the single canonical fixture root for the
+OpenSSH CA/host/user certs + keys, the generated loopback TLS identities
+(PKCS#12 + PEM) with the well-known test password, and the captured public
+certificate chains; the `TeleportPackageTests` suites (which host Core- and
+Auth-subject tests) read that same tree, so there is exactly one copy. The
+`TeleportPackageTests/Fixtures/SEPWebAuthn/` subtree holds the **8 Go-generated
+SEP/WebAuthn fixtures** (`client_data_{create,get}.json`,
+`auth_data_{create,get}.bin`, `cose_pubkey.cbor`, `pub_key_raw.bin`,
+`signature_create.der`, `attestation_object_create.cbor`), which no Core suite
+uses.
 
 The 8 SEP fixtures are copied from `cad0p/vvterm`'s
 `spikes/sep-webauthn/fixtures/expected/` at `291d75fb` (committed in the

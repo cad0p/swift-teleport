@@ -26,8 +26,9 @@ let package = Package(
     ],
     dependencies: [
         // Floors are at/below the host's resolved set (D7): the host app
-        // resolves NIO 2.101.3 / NIOHTTP2 1.46 / NIOTS 1.28 / SwiftProtobuf
-        // 1.38.1 today, so these floors stay adoptable in Phase 2.
+        // resolves NIO 2.101.3 / NIOHTTP2 1.45.0 / NIOTS 1.28 /
+        // SwiftProtobuf 1.38.1 today, so these floors stay adoptable in
+        // Phase 2.
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
         .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.34.0"),
         .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.21.0"),
@@ -79,11 +80,13 @@ let package = Package(
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
         .testTarget(
-            name: "TeleportAuthTests",
+            name: "TeleportPackageTests",
             dependencies: ["TeleportCore", "TeleportAuth", "TeleportTesting"],
             // Fixtures are read at runtime via `#filePath`-relative paths; the
-            // 8 SEPWebAuthn Go fixtures + the OpenSSH/loopback-TLS identities
-            // are data, not target sources.
+            // 8 SEPWebAuthn Go fixtures are data, not target sources. The
+            // OpenSSH / loopback-TLS fixtures this target shares with the Core
+            // suites live in the single canonical tree under
+            // `Tests/TeleportCoreTests/Fixtures/` (see TeleportFixtureSupport).
             exclude: ["Fixtures"],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),

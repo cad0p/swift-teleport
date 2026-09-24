@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //
 //  TeleportKeyRingAndCoordinatorTests.swift
-//  TeleportAuthTests
+//  TeleportPackageTests
 //
 //  Package-local coverage for the `TeleportAuth` surface against the
 //  `TeleportTesting` mocks:

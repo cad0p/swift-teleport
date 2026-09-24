@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 //
 //  TeleportFixtureSupport.swift
-//  TeleportAuthTests
+//  TeleportPackageTests
 //
 //  Shared test seams for the Teleport coordinators:
 //    - fixed SSH/TLS keypair generators bound to the committed fixtures, so
@@ -12,6 +12,12 @@
 //    - the fixture-bound HTTP response factories the host's
 //      `MockTeleportHTTPClient` used to carry (the package mock is
 //      fixture-free; the payloads live with the tests).
+//
+//  Fixture root: this target hosts Core- and Auth-subject suites, so the
+//  OpenSSH / loopback-TLS material it shares with the Core suites is read from
+//  the single canonical tree at `Tests/TeleportCoreTests/Fixtures/` — there is
+//  exactly one copy, so the two targets cannot drift. The SEPWebAuthn Go
+//  fixtures are Auth-only and stay in this target under `Fixtures/SEPWebAuthn/`.
 //
 
 import Foundation
@@ -45,10 +51,13 @@ enum TeleportFixtureSupport {
         fixtureString("OpenSSH/host-cert-ed25519.pub")
     }
 
+    /// Resolves a fixture under the canonical Core test tree
+    /// (`Tests/TeleportCoreTests/Fixtures/`).
     static func fixtureURL(_ relativePath: String) -> URL {
         URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/\(relativePath)")
+            .deletingLastPathComponent()  // TeleportPackageTests/
+            .deletingLastPathComponent()  // Tests/
+            .appendingPathComponent("TeleportCoreTests/Fixtures/\(relativePath)")
     }
 
     static func fixtureString(_ relativePath: String) -> String {

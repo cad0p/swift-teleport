@@ -113,8 +113,8 @@ public final class TeleportRegistrationCoordinator: ObservableObject, TeleportRe
     @Published public private(set) var state: TeleportRegistrationState = .idle
 
     /// The injected gRPC client (wraps CreateAuthenticateChallenge,
-    /// CreateRegisterChallenge, AddMFADeviceSync). Defaults to the shared
-    /// `TeleportGRPCClient` in production; injectable for tests.
+    /// CreateRegisterChallenge, AddMFADeviceSync). Minted per presentation by
+    /// the host composition (`LiveTeleportGRPCClient`); injectable for tests.
     private let grpcClient: any TeleportGRPCClienting
 
     /// The injected Browser MFA ceremony runner. Defaults to the shared

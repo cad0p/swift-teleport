@@ -30,7 +30,7 @@ xcodebuild build -scheme swift-teleport-Package \
 
 Expected: build clean (no warnings), **322 tests** pass (172 XCTest + 150
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
-`TeleportAuthTests`), fixture package builds, boundary check OK, selftest OK,
+`TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds.
 
 ## 3. Independent-review protocol

@@ -2,10 +2,11 @@
 #
 # Two jobs:
 #   - `headers` (ubuntu): the package boundary + license gate — no tracked file
-#     carries the AGPL SPDX marker, and no `Sources/TeleportCore` file
+#     carries the AGPL SPDX marker, and no `Sources/` file (every target)
 #     references a host symbol (SSHError, KeychainError, Logger.forCategory,
 #     UserDefaults.standard, AuthMethod, TeleportKeyRing.shared,
-#     app.vivy.vvterm, SessionMutex). Fast; runs on every PR.
+#     app.vivy.vvterm, SessionMutex, TeleportKeyRingStoring). Fast; runs on
+#     every PR.
 #   - `macos` (macos-26, Xcode 26 / Swift 6.2): `swift test` on macOS arm64 in
 #     Swift 6 language mode, plus an iOS-simulator `xcodebuild build` (build
 #     only — `swift test` already runs the suite), plus the cross-package

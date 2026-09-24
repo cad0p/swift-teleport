@@ -590,7 +590,7 @@ nonisolated final class HeadlessLoginWireTests: XCTestCase {
     func testPostSignature_defaultsToTheSharedTrustSessionExpression() throws {
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // HeadlessLoginWireTests.swift
-            .deletingLastPathComponent()  // TeleportAuthTests/
+            .deletingLastPathComponent()  // TeleportPackageTests/
             .deletingLastPathComponent()  // Tests/
         let source = try String(
             contentsOf: repositoryRoot

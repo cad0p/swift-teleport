@@ -22,7 +22,6 @@
 
 import Foundation
 import TeleportCore
-import TeleportAuth
 
 /// A mock Teleport web-api HTTP client. Returns a scripted
 /// `HeadlessLoginResponse` (or throws) on `headlessLogin`.

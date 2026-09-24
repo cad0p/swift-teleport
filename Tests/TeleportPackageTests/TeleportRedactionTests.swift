@@ -86,7 +86,7 @@ nonisolated final class TeleportRedactionTests: XCTestCase {
     private func repositoryRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()  // TeleportRedactionTests.swift
-            .deletingLastPathComponent()  // TeleportAuthTests/
+            .deletingLastPathComponent()  // TeleportPackageTests/
             .deletingLastPathComponent()  // Tests/
     }
 

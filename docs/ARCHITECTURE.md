@@ -167,9 +167,17 @@ listener resolves exactly once.
 | --- | --- |
 | `TeleportGRPCConnection` | `@unchecked Sendable`; NIO channel + multiplexer are thread-safe; identity deletion is lock-guarded |
 | `TeleportKeychainConfig` | `@unchecked Sendable`; carries an injected `UserDefaults` (thread-safe) |
-| `GRPCClientIdentity` | lock-guarded static registry; the `sec_identity_t` handle is consumed on the connection's queue |
-| `BootstrapResult`, `TLSKeyPair`, `GRPCClientIdentity` | **not** `Sendable`; MainActor-bound (they hold `SecKey`/CF refs) |
+| `BootstrapResult`, `TLSKeyPair`, `GRPCClientIdentity` | **not** `Sendable`; MainActor-bound (they hold `SecKey`/CF refs). `GRPCClientIdentity` also owns the lock-guarded static label registry, and its `sec_identity_t` handle is consumed on the connection's queue |
 | `TeleportKeyRing`, the coordinators, the mocks | `@MainActor`-isolated (global-actor classes are implicitly `Sendable`) |
+
+**`nonisolated deinit` convention.** Every MainActor-isolated class that can
+be released synchronously — `TeleportWebAuthnBuilder`, `TeleportGRPCConnection`,
+`BrowserMFACeremony`, `SecureEnclaveSigner`, `SoftwareSigner`, and the 7
+`TeleportTesting` mocks (12 classes) — declares an empty `nonisolated deinit {}`.
+The compiler-synthesized deinit of a MainActor class takes the back-deployed
+isolated-deinit path, which aborts (invalid free) when the last reference drops
+outside a task context (swiftlang/swift#85663, #88036). The empty body is
+deliberate: it changes which deinit path is emitted, not behavior.
 
 **Swift 6 isolation.** Every target uses `.defaultIsolation(MainActor.self)`
 (see [`SPEC.md`](SPEC.md)). Declarations the default does not cover are marked

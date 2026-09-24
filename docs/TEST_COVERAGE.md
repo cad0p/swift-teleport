@@ -7,8 +7,8 @@
 | `TeleportCoreTests` | Swift Testing | 6 | 116 |
 | `TeleportCoreTests` | XCTest | 5 | 72 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
-| `TeleportAuthTests` | Swift Testing | 4 | 27 |
-| `TeleportAuthTests` | XCTest | 11 | 100 |
+| `TeleportPackageTests` | Swift Testing | 4 | 27 |
+| `TeleportPackageTests` | XCTest | 11 | 100 |
 | **Total** | | | **322** |
 
 ## Ported suites (from `cad0p/vvterm`)
