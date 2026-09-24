@@ -21,6 +21,7 @@ let package = Package(
     ],
     products: [
         .library(name: "TeleportCore", targets: ["TeleportCore"]),
+        .library(name: "TeleportAuth", targets: ["TeleportAuth"]),
     ],
     dependencies: [
         // Floors are at/below the host's resolved set (D7): the host app
@@ -47,6 +48,14 @@ let package = Package(
             // must not treat it as an unhandled resource. Target-relative:
             // the proto lives under `Infrastructure/`.
             exclude: ["Infrastructure/iotest_mfa.proto"],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
+        ),
+        .target(
+            name: "TeleportAuth",
+            dependencies: ["TeleportCore"],
+            // The only UserDefaults user: ship the required-reason declaration
+            // with the target that touches it (`CA92.1`).
+            resources: [.process("PrivacyInfo.xcprivacy")],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
         .testTarget(

@@ -30,12 +30,16 @@ import Network
 // MARK: - Errors
 
 /// Errors surfaced by `BrowserMFACeremony`.
-nonisolated enum BrowserMFACeremonyError: Error, LocalizedError {
+///
+/// `package` (not public): the only consumer is the `TeleportAuth`
+/// registration coordinator, which catches the case to pick the
+/// first-device fallback; the host never names it.
+package nonisolated enum BrowserMFACeremonyError: Error, LocalizedError {
     case noBrowserMFAChallenge
     case safariFailed(String)
     case listenerFailed(String)
 
-    var errorDescription: String? {
+    package var errorDescription: String? {
         switch self {
         case .noBrowserMFAChallenge:
             return "server did not return a BrowserMFAChallenge (is BrowserMFATSHRedirectURL set + does the user have a Browser WebAuthn device?)"
