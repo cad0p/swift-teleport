@@ -49,6 +49,16 @@ The import preserves file content except for:
    live in the test targets). `SoftwareSigner` moves from `TeleportCore` to
    `TeleportTesting` (and `package` → `public`) because its only consumers are
    test targets.
+5. **One deliberate behaviour fix** — `SSHTLSTransport`'s pump end is now
+   closed through a single-owner guard (`PumpFDCloser`). The host closes that
+   fd from six racing paths and treats a repeated `close(2)` as harmless; it is
+   not — if the fd number has been reused for another file, the close lands on
+   the wrong file and the next read there fails with `EBADF`. Found via a
+   spurious fixture-read failure under the package's parallel `swift test`; the
+   host carries the identical code and hazard
+   ([`cad0p/vvterm#234`](https://github.com/cad0p/vvterm/issues/234)). Two
+   regression tests pin the guard, including a source-level pin that no raw
+   `Darwin.close(...pumpFD...)` reappears.
 
 Nothing else changed.
 

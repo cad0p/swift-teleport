@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **332 tests** pass (172 XCTest + 160
+Expected: build clean (no warnings), **334 tests** pass (172 XCTest + 162
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds.
@@ -74,7 +74,8 @@ follow-up commits on the same branch; the PR description records the rounds.
   fail-closed gate.
 
 ### Transport / TLS change
-- `TeleportTLSTrustTests` (47) + `SSHTLSTransportTests` (13) green, including
+- `TeleportTLSTrustTests` (47) + `SSHTLSTransportTests` (15, including the
+  pump-fd single-ownership guard) green, including
   the loopback handshake and the fail-closed DER matrix.
 - Re-check the `nonisolated` markers on `TeleportTLSTrust` and
   `TeleportLogging` if isolation changed.

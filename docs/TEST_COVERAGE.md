@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **332 tests** across two frameworks and three targets:
+`swift test` runs **334 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
-| `TeleportCoreTests` | Swift Testing | 6 | 116 |
+| `TeleportCoreTests` | Swift Testing | 6 | 118 |
 | `TeleportCoreTests` | XCTest | 5 | 72 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
 | `TeleportPackageTests` | Swift Testing | 5 | 37 |
 | `TeleportPackageTests` | XCTest | 11 | 100 |
-| **Total** | | | **332** |
+| **Total** | | | **334** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -24,7 +24,7 @@
 | `TeleportDeviceReadinessTests` | XCTest | `TeleportDeviceReadinessResolver` (readiness matrix) |
 | `HeadlessIDTests` | XCTest | `HeadlessID.compute` UUIDv5 golden vectors (4) |
 | `TeleportProxySubsystemTests` | Swift Testing | `TeleportProxySubsystem.request` |
-| `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) |
+| `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) + the pump-fd single-ownership guard (15) |
 | `TeleportTLSTrustTests` | Swift Testing | `TeleportTLSTrust` (chain/name/EKU/ALPN + DER fail-closed matrix) |
 | `TeleportIssuedCertValidatorTests` | Swift Testing | issued-cert binding checks (11) |
 | `TeleportCertBindingCoordinatorTests` | Swift Testing | the coordinators store nothing on a cert/key mismatch (10) |
