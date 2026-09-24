@@ -530,10 +530,103 @@ enum HostSSHClientMirror {
     }
 }
 
+// MARK: - Mirror: the host `SSHClient` D6 channel seam + package error surface
+
+/// The host's `SessionMutex` (an `NSLock` wrapper, `@unchecked Sendable`)
+/// conforms to this; the `SSHClient` proxy-subsystem path passes it into the
+/// bridge factory.
+final class HostSessionMutex: @unchecked Sendable {
+    nonisolated init() {}
+    nonisolated func withLock<T>(_ body: () -> T) -> T { body() }
+}
+extension HostSessionMutex: TeleportSessionMutex {}
+
+/// The host's `SSHProxySubsystemTransport` (an actor) conforms to this.
+actor HostChannelTransport: TeleportChannelTransport {
+    func start() async throws -> Int32 { -1 }
+    func close() async {}
+    nonisolated func cancelPumpSync() {}
+}
+
+/// The host's `SSHProxySubsystemTransportFactory` conforms to this and is the
+/// defaulted `SSHClient.teleportTransportFactory` value.
+struct HostChannelTransportFactory: TeleportChannelTransportFactory {
+    func makeChannelTransport(
+        channel: OpaquePointer,
+        outerSession: OpaquePointer?,
+        mutex: any TeleportSessionMutex
+    ) -> any TeleportChannelTransport {
+        _ = channel
+        _ = outerSession
+        _ = mutex
+        return HostChannelTransport()
+    }
+}
+
+@MainActor
+enum HostD6SeamMirror {
+    /// Only the Teleport SSH route is offered on port 443.
+    static func alpnRoutes() -> [String] {
+        _ = SSHTLSTransport.alpnProtocol
+        return SSHTLSTransport.offeredALPNProtocols
+    }
+
+    /// `TeleportErrorMapping` switches over the package error exhaustively.
+    static func packageErrorDescription(_ error: TeleportPackageError) -> String {
+        switch error {
+        case .connectionFailed(let message): return message
+        case .keychain(let status): return "\(status)"
+        }
+    }
+
+    /// The host builds its loggers through the package's default seam.
+    static func hostLogger() -> Logger {
+        DefaultTeleportLogging().logger(category: "teleport-bootstrap")
+    }
+
+    /// `SSHClient` and `TeleportClusterTLSState` parse `authorized_keys`
+    /// lines (and read `.blob`) to verify host keys.
+    static func authorizedKeysParsing(line: String) -> Data? {
+        OpenSSHCertificate.parseAuthorizedKeysLine(line)?.blob
+    }
+
+    /// The host constructs `BootstrapResult` in its composition and UI-test
+    /// harnesses, then reads every field.
+    static func bootstrapResultShape() {
+        guard let key = SecKeyCreateRandomKey(
+            [
+                kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+                kSecAttrKeySizeInBits as String: 256,
+            ] as CFDictionary,
+            nil
+        ) else { return }
+        let result = TeleportBootstrapCoordinator.BootstrapResult(
+            sshCertPEM: "cert",
+            tlsCertPEM: "tls",
+            tlsKeyPairPrivateKey: key,
+            clusterName: "teleport.pcad.it",
+            clusterCAPEMs: ["ca"],
+            certValidBefore: Date()
+        )
+        _ = result.sshCertPEM
+        _ = result.tlsCertPEM
+        _ = result.tlsKeyPairPrivateKey
+        _ = result.clusterName
+        _ = result.clusterCAPEMs
+        _ = result.certValidBefore
+    }
+}
+
 // MARK: - Mirror: one iOS UI-test harness
 
 @MainActor
 enum HostHarnessMirror {
+    /// `TeleportTesting`'s software signer — the kept host-side
+    /// `TeleportServerIntegrationTests` constructs it, so it has to stay
+    /// reachable from a different package (`public`, not `package`).
+    static func softwareSigner() -> SoftwareSigner {
+        SoftwareSigner()
+    }
     static func harnessKeyRing() -> MockTeleportKeyRing {
         let keyRing = MockTeleportKeyRing()
         keyRing.seed(
