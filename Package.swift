@@ -2,13 +2,12 @@
 //
 // swift-teleport — Teleport client core for Apple platforms.
 //
-// Zero external dependencies in v0.1.0: the walking skeleton ships only the
-// package-movable, dependency-closed Teleport client seam + transports. The
-// gRPC/protobuf transport, keyring, coordinators, and the WebAuthn/SEP
-// machinery arrive in v0.2.0 (see docs/PROVENANCE.md).
+// v0.2.0 adds the gRPC/protobuf transport (`TeleportCore`) plus the
+// keyring/coordinators (`TeleportAuth`) and the mocks (`TeleportTesting`);
+// see docs/PROVENANCE.md for the import inventory and dependency floors.
 //
-// `.defaultIsolation(MainActor.self)` on all three targets reproduces the
-// host app's `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` build setting: the
+// `.defaultIsolation(MainActor.self)` on all targets reproduces the host
+// app's `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` build setting: the
 // ported Teleport sources rely on that default to compile under Swift 6
 // strict concurrency without per-declaration annotations. See docs/SPEC.md.
 
@@ -23,9 +22,31 @@ let package = Package(
     products: [
         .library(name: "TeleportCore", targets: ["TeleportCore"]),
     ],
+    dependencies: [
+        // Floors are at/below the host's resolved set (D7): the host app
+        // resolves NIO 2.101.3 / NIOHTTP2 1.46 / NIOTS 1.28 / SwiftProtobuf
+        // 1.38.1 today, so these floors stay adoptable in Phase 2.
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
+        .package(url: "https://github.com/apple/swift-nio-http2.git", from: "1.34.0"),
+        .package(url: "https://github.com/apple/swift-nio-transport-services.git", from: "1.21.0"),
+        // 1.38.1 is the version the committed `iotest_mfa.pb.swift` is
+        // generated with (bytecode name-map format needs >= 1.28).
+        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.38.1"),
+    ],
     targets: [
         .target(
             name: "TeleportCore",
+            dependencies: [
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOHTTP2", package: "swift-nio-http2"),
+                .product(name: "NIOTransportServices", package: "swift-nio-transport-services"),
+                .product(name: "SwiftProtobuf", package: "swift-protobuf"),
+            ],
+            // The IDL is the source of the committed `.pb.swift`; SwiftPM
+            // must not treat it as an unhandled resource. Target-relative:
+            // the proto lives under `Infrastructure/`.
+            exclude: ["Infrastructure/iotest_mfa.proto"],
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
         .testTarget(

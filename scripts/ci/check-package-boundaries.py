@@ -8,10 +8,11 @@ Two independent checks, both fail-closed:
      carve-out stay host-side in cad0p/vvterm (see THIRD_PARTY_NOTICES.md and
      docs/PROVENANCE.md).
 
-  2. BOUNDARY — no file under `Sources/TeleportCore/` may reference a host
-     symbol. The package must not depend on the host app's error types,
-     logging, defaults, auth model, keyring singleton, or bundle id; those are
-     injected through the D6 seam protocols.
+  2. BOUNDARY — no file under `Sources/` (every target: `TeleportCore`,
+     `TeleportAuth`, `TeleportTesting`) may reference a host symbol. The
+     package must not depend on the host app's error types, logging, defaults,
+     auth model, keyring singleton, bundle id, or host-only observation
+     protocol; those are injected through the D6 seam protocols.
 
 Run from the package root:
 
@@ -38,10 +39,13 @@ SELF = "scripts/ci/check-package-boundaries.py"
 
 AGPL_MARKER = "SPDX-License-Identifier: AGPL-3.0-or-later"
 
-SOURCE_ROOT = "Sources/TeleportCore"
+SOURCE_ROOT = "Sources"
 
 # Host symbols/strings forbidden inside the package sources. `\b` keeps the
-# package's own `TeleportSessionMutex` protocol allowed.
+# package's own `TeleportSessionMutex` protocol allowed. `TeleportKeyRingStoring`
+# is the host-only `@MainActor` observation protocol: the package keyring
+# conforms to the plain `TeleportCredentialStore` seam, and the host restores
+# the observation conformance by extension in Phase 2.
 FORBIDDEN = re.compile(
     r"SSHError"
     r"|KeychainError"
@@ -51,6 +55,7 @@ FORBIDDEN = re.compile(
     r"|TeleportKeyRing\.shared"
     r"|app\.vivy\.vvterm"
     r"|\bSessionMutex\b"
+    r"|TeleportKeyRingStoring"
 )
 
 BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
@@ -135,6 +140,8 @@ def run_selftest() -> int:
         ("let mutex: any TeleportSessionMutex = factory()", False),
         ("let store = TeleportKeyRing.shared", True),
         ("let defaults = UserDefaults.standard", True),
+        ("extension TeleportKeyRing: TeleportKeyRingStoring {}", True),
+        ("let seam: any TeleportCredentialStore = ring", False),
     ]
     for source, should_match in boundary_cases:
         matched = bool(FORBIDDEN.search(strip_comments(source)))
