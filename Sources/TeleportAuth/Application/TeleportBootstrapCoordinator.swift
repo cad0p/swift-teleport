@@ -113,6 +113,11 @@ public protocol TeleportBootstrapCoordinating: AnyObject, ObservableObject {
 
 @MainActor
 public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBootstrapCoordinating {
+    // Explicit nonisolated deinit: the compiler-synthesized deinit of a
+    // MainActor-isolated class takes the back-deployed isolated-deinit path,
+    // which aborts (invalid free) when released outside a task context —
+    // swiftlang/swift#85663, #88036. Empty body, no behavior change.
+    nonisolated deinit {}
     @Published public private(set) var state: TeleportBootstrapState = .idle
 
     /// The injected HTTP client (wraps HeadlessLogin.post). Defaults to the
