@@ -250,7 +250,7 @@ public final class TeleportRegistrationCoordinator: ObservableObject, TeleportRe
                 existingMFAResponse: existingMfaResponse
             )
         } catch {
-            logger.error("CreateRegisterChallenge failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("CreateRegisterChallenge failed: \(TeleportErrorRedaction.grpcFailure(error), privacy: .public)")
             state = .failed(.server("CreateRegisterChallenge: \(error.localizedDescription)"))
             await grpcClient.disconnect()
             return
@@ -268,7 +268,11 @@ public final class TeleportRegistrationCoordinator: ObservableObject, TeleportRe
         case .success(let resolved):
             rpID = resolved
         case .failure(let error):
-            logger.error("CreateRegisterChallenge rpID rejected: \(error.errorDescription ?? "unknown", privacy: .public)")
+            // The rejection text embeds the *server-provided* rpID, so the log
+            // payload carries the case only; the descriptive text is in the UI
+            // state below.
+            let shape = error.logSafeDescription
+            logger.error("CreateRegisterChallenge rpID rejected (\(shape, privacy: .public))")
             state = .failed(.server("CreateRegisterChallenge: \(error.errorDescription ?? "WebAuthn rpID rejected")"))
             await grpcClient.disconnect()
             return
@@ -333,7 +337,7 @@ public final class TeleportRegistrationCoordinator: ObservableObject, TeleportRe
                 newMFAResponse: addReq
             )
         } catch {
-            logger.error("AddMFADeviceSync failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("AddMFADeviceSync failed: \(TeleportErrorRedaction.grpcFailure(error), privacy: .public)")
             // Distinguish ALREADY_EXISTS (gRPC code 6) from other errors.
             // The concrete gRPC client surfaces this via GRPCError.grpc(6, ...);
             // we string-match because GRPCError isn't concretely typed here.

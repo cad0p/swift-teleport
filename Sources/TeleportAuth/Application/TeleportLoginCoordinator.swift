@@ -183,7 +183,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         do {
             beginResp = try await httpClient.loginBegin(baseURL: baseURL)
         } catch {
-            logger.error("login/begin failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("login/begin failed: \(TeleportErrorRedaction.wireFailure(error), privacy: .public)")
             state = .failed(mapHTTPError(error))
             return
         }
@@ -201,7 +201,11 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         case .success(let resolved):
             rpID = resolved
         case .failure(let error):
-            logger.error("login/begin rpID rejected: \(error.errorDescription ?? "unknown", privacy: .public)")
+            // The rejection text embeds the *server-provided* rpID, so the log
+            // payload carries the case only; the descriptive text is in the UI
+            // state below.
+            let shape = error.logSafeDescription
+            logger.error("login/begin rpID rejected (\(shape, privacy: .public))")
             state = .failed(.server("login/begin: \(error.errorDescription ?? "WebAuthn rpID rejected")"))
             return
         }
@@ -253,7 +257,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
                 ttl: ttl
             )
         } catch {
-            logger.error("login/finish failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("login/finish failed: \(TeleportErrorRedaction.wireFailure(error), privacy: .public)")
             state = .failed(mapHTTPError(error))
             return
         }
