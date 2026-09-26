@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-09-26
+
+<!-- USER-EDITABLE SECTION START -->
+Host parity with the post-`v0.2.0` security fixes in
+[`cad0p/vvterm`](https://github.com/cad0p/vvterm) @ `05764aa2`, plus the four
+deferred package findings.
+
+`TeleportCore`/`TeleportAuth` now match the host: single-owner pump-fd close
+with `SO_NOSIGPIPE`, wire-derived error log redaction, request-generation
+stale-continuation guards, `nonisolated` deinit markers, OSStatus signer
+classification, the GCM-gated browser-MFA callback, and the nested Secure
+Enclave private-key attributes (the `errSecAuthFailed` device-registration
+failure).
+
+Also in this release:
+
+- the host-surface fixture's `Package.resolved` is tracked, so the
+  cross-package gate resolves reproducibly (#13);
+- the gitleaks allowlist pins the 19 known loopback fixtures instead of a
+  directory glob (#14);
+- the SEP device name is logged with `privacy: .private` (#15);
+- the release-visible keychain-sweep bounds are recorded in `docs/API.md` (#16).
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Host parity + deferred package findings (closes #13, closes #14, closes #15, closes #16)
+
+
 ## [0.2.0] - 2026-09-24
 
 <!-- USER-EDITABLE SECTION START -->
