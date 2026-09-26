@@ -1,5 +1,13 @@
 # SwiftPM — a library never commits its resolved dependency graph.
 Package.resolved
+# Exception (issue #13): `Fixtures/HostSurfaceCheck` is the cross-package
+# public-surface gate, a *consumer* package whose pinned graph is what makes
+# the gate reproducible on a fresh clone (no re-resolving the `from:` floors).
+# Regenerate it with `swift package resolve --package-path
+# Fixtures/HostSurfaceCheck` whenever that fixture's `Package.swift` changes:
+# the `originHash` is invalidated by any manifest edit, and a stale pin then
+# silently re-resolves.
+!Fixtures/HostSurfaceCheck/Package.resolved
 .swiftpm/
 .build/
 
