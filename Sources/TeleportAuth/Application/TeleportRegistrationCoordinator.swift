@@ -163,7 +163,7 @@ public final class TeleportRegistrationCoordinator: ObservableObject, TeleportRe
         bootstrapResult: TeleportBootstrapCoordinator.BootstrapResult
     ) async {
         state = .connectingGRPC
-        logger.info("beginning registration for cluster \(cluster.host, privacy: .public) device=\(deviceName, privacy: .public)")
+        logger.info("beginning registration for cluster \(cluster.host, privacy: .public) device=\(deviceName, privacy: .private)")
 
         // ── Step 1: connect the gRPC client with the Phase-1 cert ────────
         // The cert authenticates the call (ContextUser, mTLS). The cluster

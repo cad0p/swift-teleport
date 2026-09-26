@@ -177,7 +177,7 @@ public final class TeleportKeyRing: ObservableObject, TeleportCredentialStore {
         cred.deviceName = deviceName
         credentials[clusterId] = cred
         save()
-        logger.info("stored SEP key metadata for cluster \(clusterId.uuidString, privacy: .public), device=\(deviceName, privacy: .public)")
+        logger.info("stored SEP key metadata for cluster \(clusterId.uuidString, privacy: .public), device=\(deviceName, privacy: .private)")
     }
 
     public func storeLoginCert(_ certPEM: String, validBefore: Date, for clusterId: UUID) {

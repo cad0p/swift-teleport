@@ -289,6 +289,42 @@ nonisolated final class TeleportRedactionTests: XCTestCase {
         }
     }
 
+    /// The unified log does not apply privacy masking on the iOS Simulator, so
+    /// a runtime readback cannot distinguish an annotated device-name
+    /// interpolation from a bare one. Pin the annotation form at the source
+    /// level: every `device=<name>` log line must be private (issue #15).
+    @MainActor
+    func testDeviceNameLogsArePrivacyAnnotated() throws {
+        let sources = [
+            "Sources/TeleportAuth/Application/TeleportKeyRing.swift",
+            "Sources/TeleportAuth/Application/TeleportRegistrationCoordinator.swift",
+        ]
+        var deviceNameLines: [String] = []
+        for relative in sources {
+            let source = try String(
+                contentsOf: repositoryRoot().appendingPathComponent(relative),
+                encoding: .utf8
+            )
+            deviceNameLines.append(
+                contentsOf: source
+                    .components(separatedBy: "\n")
+                    .filter { $0.contains("device=\\(") }
+            )
+        }
+
+        XCTAssertEqual(
+            deviceNameLines.count,
+            2,
+            "expected exactly two device-name log lines to review; found: \(deviceNameLines)"
+        )
+        for line in deviceNameLines {
+            XCTAssertTrue(
+                line.contains("privacy: .private"),
+                "the device name must be logged with a privacy annotation: \(line)"
+            )
+        }
+    }
+
     // MARK: - BrowserMFAListener
 
     /// The callback rejection paths must log a static reason without echoing
