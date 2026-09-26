@@ -58,7 +58,33 @@ public final class TeleportGRPCConnection: @unchecked Sendable {
 
 public enum GRPCError: Error, CustomStringConvertible, LocalizedError { … }
 public enum GRPCTLSOptions { … }
-public struct GRPCClientIdentity { … }
+
+/// The per-connect keychain identity. The cleanup surface is **release-
+/// visible by decision** (issue #16):
+///
+/// - `labelPrefix = "vvterm-grpc-"` scopes every identity this app creates.
+/// - `staleIdentityAge = 30 * 60` ages out leftovers from a crashed process.
+/// - the sweep runs at most once per process, skips registered live labels,
+///   and only re-arms when every keychain class enumerated successfully.
+/// - the `…ForTesting` seams are `#if DEBUG`-gated and absent from release.
+///
+/// DECISION (recorded on #16): keep the release-visible surface. The sweep is
+/// bounded by the app's own label registry + the age gate, and the direct
+/// `deleteKeychainItems(label:)` call below is **caller-supplied-label only**
+/// — it is NOT prefix-scoped; only `deleteStaleIdentities(logger:)` is.
+public struct GRPCClientIdentity {
+    public static let labelPrefix: String
+    public static let staleIdentityAge: TimeInterval
+    public static func makeLabel(now: Date) -> String
+    public static func isLiveLabel(_ label: String) -> Bool
+    public func deleteKeychainItems(logger: Logger)
+    public static func deleteKeychainItems(label: String, logger: Logger)
+    @discardableResult public static func deleteStaleIdentities(logger: Logger) -> Bool
+    #if DEBUG
+    public static func deleteStaleIdentitiesForTesting(logger: Logger) -> Bool
+    public static func resetSweepGateForTesting()
+    #endif
+}
 ```
 
 ### Domain + wire
