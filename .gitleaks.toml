@@ -2,9 +2,12 @@ title = "swift-teleport Gitleaks Config"
 
 # Mirrors the host repo's config. Consumed by the gitleaks CLI (local runs and
 # any scanner configured outside this repo); this repo's *enforced* secret gate
-# is GitHub secret scanning + push protection. The allowlist is deliberately
-# path-anchored to the test fixture directory: it cannot mask a finding
-# elsewhere, and a crafted path cannot widen it.
+# is GitHub secret scanning + push protection (verified on the repo, not
+# assumed). The allowlist is deliberately pinned to the exact test-fixture
+# filenames: it cannot mask a finding elsewhere, and a *newly added* file in
+# that directory is scanned on a local gitleaks run. (The host repo still
+# carries the directory-wide shape; that is a recorded follow-up, not fixed
+# here — see cad0p/swift-teleport#14.)
 
 [extend]
 useDefault = true
@@ -12,5 +15,23 @@ useDefault = true
 [[allowlists]]
 description = "Test-only loopback TLS identity + certs for the Teleport TLS trust tests (no production secret)."
 paths = [
-  '''^Tests/[^/]+/Fixtures/loopback-tls/''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/duplicate-basicconstraints\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/longlived-ca-as-leaf\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/longlived-ca\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/longlived-clientauth\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/longlived-keyenc\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/longlived-serverauth\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/loopback-ca\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/self-signed\.p12$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/self-signed\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/server-expired\.key$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/server-expired\.p12$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/server-expired\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/server-wrongname\.key$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/server-wrongname\.p12$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/server-wrongname\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/server\.key$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/server\.p12$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/server\.pem$''',
+  '''^Tests/TeleportCoreTests/Fixtures/loopback-tls/shortlived-ca-as-leaf\.pem$''',
 ]

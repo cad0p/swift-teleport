@@ -95,6 +95,11 @@ public protocol TeleportLoginCoordinating: AnyObject, ObservableObject {
 
 @MainActor
 public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoordinating {
+    // Explicit nonisolated deinit: the compiler-synthesized deinit of a
+    // MainActor-isolated class takes the back-deployed isolated-deinit path,
+    // which aborts (invalid free) when released outside a task context —
+    // swiftlang/swift#85663, #88036. Empty body, no behavior change.
+    nonisolated deinit {}
     @Published public private(set) var state: TeleportLoginState = .idle
 
     /// The injected HTTP client (wraps loginBegin + loginFinish). Defaults
@@ -183,7 +188,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         do {
             beginResp = try await httpClient.loginBegin(baseURL: baseURL)
         } catch {
-            logger.error("login/begin failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("login/begin failed: \(TeleportErrorRedaction.wireFailure(error), privacy: .public)")
             state = .failed(mapHTTPError(error))
             return
         }
@@ -201,7 +206,11 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         case .success(let resolved):
             rpID = resolved
         case .failure(let error):
-            logger.error("login/begin rpID rejected: \(error.errorDescription ?? "unknown", privacy: .public)")
+            // The rejection text embeds the *server-provided* rpID, so the log
+            // payload carries the case only; the descriptive text is in the UI
+            // state below.
+            let shape = error.logSafeDescription
+            logger.error("login/begin rpID rejected (\(shape, privacy: .public))")
             state = .failed(.server("login/begin: \(error.errorDescription ?? "WebAuthn rpID rejected")"))
             return
         }
@@ -227,7 +236,17 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
                 signer: signer
             )
         } catch {
-            logger.error("WebAuthn.login failed: \(error.localizedDescription, privacy: .public)")
+            // The OSStatus (a non-secret local integer) is the only triage
+            // signal when a locale message collides with a specific state,
+            // so log it alongside the message.
+            if let signerError = error as? SignerError,
+               case .biometricSigningFailed(_, let status) = signerError {
+                logger.error(
+                    "WebAuthn.login failed: OSStatus \(status, privacy: .public), \(error.localizedDescription, privacy: .public)"
+                )
+            } else {
+                logger.error("WebAuthn.login failed: \(error.localizedDescription, privacy: .public)")
+            }
             state = .failed(mapSignerError(error))
             return
         }
@@ -253,7 +272,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
                 ttl: ttl
             )
         } catch {
-            logger.error("login/finish failed: \(error.localizedDescription, privacy: .public)")
+            logger.error("login/finish failed: \(TeleportErrorRedaction.wireFailure(error), privacy: .public)")
             state = .failed(mapHTTPError(error))
             return
         }
@@ -406,18 +425,35 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
     /// Internal (not private) so the mapping is unit-testable directly.
     func mapSignerError(_ error: Error) -> TeleportLoginError {
         let msg = error.localizedDescription.lowercased()
-        // SignerError.signingFailed wraps the LAError. The LAError codes:
-        //   - .userCancel → "canceled" / "cancel"
+
+        // A message that carries a *more specific* state than the generic
+        // cancel wins. The legacy LAError-flavored strings are matched first:
         //   - .biometryLockout → "lockout"
         //   - .biometryNotEnrolled → "not enrolled" / "not available"
-        if msg.contains("cancel") {
-            return .faceIDCancelled
-        }
         if msg.contains("lockout") {
             return .faceIDUnavailable("Face ID is locked. Enter your passcode to unlock Face ID, then try again.")
         }
         if msg.contains("not enrolled") || msg.contains("not available") || msg.contains("biometry") {
             return .faceIDUnavailable("Face ID isn't available. Set up Face ID in iOS Settings.")
+        }
+
+        // Otherwise the typed OSStatus decides. The biometric prompt fails
+        // through `SecKeyCreateSignature` with a Security-framework status in
+        // `NSOSStatusErrorDomain` (there is no `LAContext` on this path), so
+        // `errSecUserCanceled` classifies a cancel locale-independently: a
+        // non-English message matches nothing above and lands here. Only the
+        // cancel code is mapped — `errSecAuthFailed` is a generic
+        // authentication failure, and claiming "Face ID is locked" for it
+        // would be a new lie.
+        if let signerError = error as? SignerError,
+           case .biometricSigningFailed(_, let status) = signerError,
+           status == errSecUserCanceled {
+            return .faceIDCancelled
+        }
+
+        // Locale-dependent cancel fallback for untyped signer failures.
+        if msg.contains("cancel") {
+            return .faceIDCancelled
         }
         return .faceIDUnavailable(error.localizedDescription)
     }

@@ -290,64 +290,6 @@ struct SSHTLSTransportTests {
             try LoopbackTLSServerTestSupport.pemString("loopback-tls/loopback-ca.pem")
         }
     }
-
-    // MARK: - Pump fd single ownership
-
-    /// The pump end is closed from six racing paths (the three `pumpNWToFD`
-    /// exits, `runPump`'s cleanup, `close()`, and the handshake-failure path).
-    /// The guard must release the descriptor on the first close so every later
-    /// close is a no-op: a repeated `close(2)` lands on whatever file has since
-    /// reused that fd number. That is how a spurious `EBADF` surfaced in an
-    /// unrelated suite during a parallel `swift test` run (2026-09-24).
-    @Test
-    func pumpFDCloserClosesTheDescriptorExactlyOnce() throws {
-        var pipeFDs: [Int32] = [0, 0]
-        #expect(pipe(&pipeFDs) == 0)
-        defer {
-            close(pipeFDs[0])
-            close(pipeFDs[1])
-        }
-
-        let closer = PumpFDCloser(fd: pipeFDs[1])
-        #expect(closer.descriptorForTesting == pipeFDs[1])
-
-        closer.close()
-        #expect(
-            fcntl(pipeFDs[1], F_GETFD) == -1,
-            "the first close must actually close the descriptor"
-        )
-        #expect(
-            closer.descriptorForTesting == nil,
-            "the first close must take ownership away so no later close can act"
-        )
-
-        // Every later close must be a no-op — nothing left to close.
-        closer.close()
-        closer.close()
-        #expect(closer.descriptorForTesting == nil)
-    }
-
-    /// Pin the single-owner shape at the source level: every close of the pump
-    /// end must go through `PumpFDCloser`, so a future edit cannot
-    /// reintroduce a second closer (the `libssh2FD` close is a different fd
-    /// and is deliberately not matched).
-    @Test
-    func pumpEndIsClosedOnlyThroughTheSingleOwnerGuard() throws {
-        let sourceURL = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()   // TeleportCoreTests
-            .deletingLastPathComponent()   // Tests
-            .deletingLastPathComponent()   // repository root
-            .appendingPathComponent("Sources/TeleportCore/Infrastructure/SSHTLSTransport.swift")
-        let source = try String(contentsOf: sourceURL, encoding: .utf8)
-
-        let rawPumpCloses = source
-            .components(separatedBy: .newlines)
-            .filter { $0.contains("Darwin.close(") && $0.contains("pumpFD") }
-        #expect(
-            rawPumpCloses.isEmpty,
-            "the pump fd must only be closed by PumpFDCloser; found: \(rawPumpCloses)"
-        )
-    }
 }
 
 #endif // canImport(Network)

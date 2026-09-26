@@ -113,6 +113,11 @@ public protocol TeleportBootstrapCoordinating: AnyObject, ObservableObject {
 
 @MainActor
 public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBootstrapCoordinating {
+    // Explicit nonisolated deinit: the compiler-synthesized deinit of a
+    // MainActor-isolated class takes the back-deployed isolated-deinit path,
+    // which aborts (invalid free) when released outside a task context —
+    // swiftlang/swift#85663, #88036. Empty body, no behavior change.
+    nonisolated deinit {}
     @Published public private(set) var state: TeleportBootstrapState = .idle
 
     /// The injected HTTP client (wraps HeadlessLogin.post). Defaults to the
@@ -146,6 +151,11 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
 
     /// The in-flight POST task. Cancelled by `cancel()` / `retry()`.
     private var postTask: Task<Void, Never>?
+
+    /// Monotonic token identifying the current bootstrap attempt. Bumped by
+    /// `begin`, `cancel` and `retry`, so a continuation from an older POST
+    /// cannot write state after a newer attempt (or a cancel) took over.
+    private var requestGeneration = 0
 
     /// The ephemeral TLS keypair generated for this bootstrap. Kept alive
     /// for Phase 2 (the gRPC client needs the SecKey + PEM cert for mTLS).
@@ -218,7 +228,10 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
     }
 
     public func begin(cluster: TeleportCluster) async {
-        // Reset any prior state.
+        // Reset any prior state, and bump the generation so a continuation
+        // from a previous attempt cannot write state this attempt owns.
+        requestGeneration &+= 1
+        let generation = requestGeneration
         postTask?.cancel()
         postTask = nil
         lastBootstrapResult = nil
@@ -288,10 +301,11 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
                     cluster: cluster,
                     sshPrivateKeyPEM: sshPrivateKeyPEM,
                     sshPubKey: sshPubKey,
-                    requestedTTLSeconds: TimeInterval(ttl) / 1_000_000_000
+                    requestedTTLSeconds: TimeInterval(ttl) / 1_000_000_000,
+                    generation: generation
                 )
             } catch {
-                await self.handlePostFailure(error: error)
+                await self.handlePostFailure(error: error, generation: generation)
             }
         }
         self.postTask = postTask
@@ -313,6 +327,10 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
             logger.error("no safariPresenter injected — cannot open Safari")
             safariOK = false
         }
+
+        // A `cancel()`/`retry()`/newer `begin()` during the presenter await
+        // owns the state now; this attempt must not write it.
+        guard generation == requestGeneration else { return }
 
         if !safariOK {
             // Safari didn't open. The POST is still running — don't abort,
@@ -341,21 +359,35 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
 
     public func cancel() async {
         logger.info("cancelling bootstrap")
+        // Bump before touching the presenter so a stale POST continuation
+        // cannot overwrite `.userCancelled`.
+        requestGeneration &+= 1
+        let generation = requestGeneration
         postTask?.cancel()
         postTask = nil
         #if canImport(AuthenticationServices)
         safariPresenter?.cancel()
         #endif
+        // Re-take after the presenter call so a newer `begin()`/`retry()`
+        // cannot be overwritten by this cancel. The presenter `cancel()` is
+        // synchronous today, so this is a defensive re-take kept symmetric
+        // with `begin`'s post-`open` re-take (which does suspend).
+        guard generation == requestGeneration else { return }
         state = .failed(.userCancelled)
     }
 
     public func retry() async {
         logger.info("retrying bootstrap")
+        requestGeneration &+= 1
+        let generation = requestGeneration
         postTask?.cancel()
         postTask = nil
         #if canImport(AuthenticationServices)
         safariPresenter?.cancel()
         #endif
+        // A newer `begin()`/`retry()` during the presenter call owns the
+        // state now. Defensive: the presenter `cancel()` is synchronous today.
+        guard generation == requestGeneration else { return }
         state = .idle
         // The caller (the bootstrap sheet) re-invokes begin() with the
         // same cluster. We don't capture the cluster here to avoid stale
@@ -369,8 +401,16 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         cluster: TeleportCluster,
         sshPrivateKeyPEM: String,
         sshPubKey: String,
-        requestedTTLSeconds: TimeInterval
+        requestedTTLSeconds: TimeInterval,
+        generation: Int
     ) async {
+        // Re-take after the POST await: a stale continuation (the request was
+        // cancelled or superseded by a newer `begin`) must not write any
+        // state, including the early `.failed` branches below. This guard also
+        // covers the window before the first keyring store — the parsing and
+        // validation between here and there do not suspend.
+        guard generation == requestGeneration else { return }
+
         guard let certB64 = response.cert, !certB64.isEmpty else {
             logger.error("POST returned 200 but no cert")
             state = .failed(.unknown("no cert in response"))
@@ -468,13 +508,17 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
             clusterCAPEMs: clusterCAPEMs,
             certValidBefore: certValidBefore
         )
-        lastBootstrapResult = result
-
         // Store the bootstrap cert in the key ring so readiness flips to
         // `needsRegistration` (cert present, no SEP key yet). Also store
         // the ed25519 private key — the SSHClient cert seam fetches it via
         // `liveEd25519PrivateKey` to feed libssh2 at connect time.
+        //
+        // Each store is an async hop that can suspend on the MainActor,
+        // during which `cancel()` or a newer `begin()` can take over; a
+        // superseded success must not leave later writes behind. Re-take the
+        // generation after every store for that reason.
         await keyRing.storeBootstrapCert(certPEM, validBefore: certValidBefore, for: cluster.id)
+        guard generation == requestGeneration else { return }
         if let privKeyData = sshPrivateKeyPEM.data(using: .utf8) {
             do {
                 try await keyRing.storeEd25519PrivateKey(privKeyData, for: cluster.id)
@@ -485,6 +529,7 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
                 // surfaces the right UX (re-bootstrap).
             }
         }
+        guard generation == requestGeneration else { return }
 
         // Persist the cluster name + TLS CA certs for the SSH TLS+ALPN
         // transport. The SSH path (`SSHTLSTransport`) dials the proxy on
@@ -499,6 +544,12 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         )
         await keyRing.storeClusterTLSState(tlsState, for: cluster.id)
 
+        // Re-take after the stores (the final await): only commit the
+        // in-memory result, the terminal state and the presenter side effect
+        // when this attempt is still current.
+        guard generation == requestGeneration else { return }
+
+        lastBootstrapResult = result
         logger.info("bootstrap succeeded — cert \(certPEM.count) chars, tls_cert \(tlsCertPEM.count) chars")
         state = .success
 
@@ -508,22 +559,15 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         #endif
     }
 
-    private func handlePostFailure(error: Error) async {
-        // A HeadlessError.http description embeds the raw response body, so
-        // log the status only — bodies can carry server-side detail (tokens,
-        // echoed request fields) that must not reach diagnostics exports.
-        let failureSummary: String
-        if case HeadlessError.http(let status, _) = error {
-            failureSummary = "HTTP \(status)"
-        } else if case HeadlessError.transport(_, let code) = error {
-            // The transport case's message is the OS-localized URLSession
-            // text; log the locale-stable code instead. Never interpolate the
-            // raw error — its userInfo can print NSErrorFailingURLKey.
-            failureSummary = "transport code=\(code?.rawValue ?? 0)"
-        } else {
-            failureSummary = error.localizedDescription
-        }
-        logger.error("POST failed: \(failureSummary, privacy: .public)")
+    private func handlePostFailure(error: Error, generation: Int) async {
+        // A stale continuation (the request was cancelled or superseded by a
+        // newer `begin`) must not overwrite the current state.
+        guard generation == requestGeneration else { return }
+
+        // The redaction rationale lives in `TeleportErrorRedaction`: a
+        // `HeadlessError.http` description embeds the raw response body, and
+        // the transport case's message can print `NSErrorFailingURLKey`.
+        logger.error("POST failed: \(TeleportErrorRedaction.wireFailure(error), privacy: .public)")
 
         // Map the infrastructure error to the coordinator-specific enum.
         let mapped: TeleportBootstrapError
@@ -537,9 +581,11 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
                 //
                 // Deliberate asymmetry with the unwrapped-URLError branch
                 // below: a wrapped `.cancelled` stays `.networkLost` here
-                // instead of `.userCancelled`. That is pre-existing behavior,
-                // preserved so this fix changes only the timeout
-                // classification (tracked as a follow-up).
+                // instead of `.userCancelled`. Decision recorded on #222 and
+                // pinned by `testWrappedTransportCancelled_mapsToNetworkLost`:
+                // a transport/OS-level cancellation is not a user action, and
+                // `cancel()` already owns `.userCancelled`. If symmetry is ever
+                // wanted, the neutral fix is a distinct `.cancelled` state.
                 mapped = (code == .timedOut) ? .timeout : .networkLost
             case .http(let status, let body):
                 // Non-2xx HTTP. Surface the server message verbatim.
@@ -575,7 +621,9 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
 
         state = .failed(mapped)
 
-        // Dismiss the Safari sheet on failure too.
+        // Dismiss the Safari sheet on failure too. No re-take is needed here:
+        // nothing suspends between the entry guard and this point, so the
+        // generation cannot have changed.
         #if canImport(AuthenticationServices)
         safariPresenter?.cancel()
         #endif

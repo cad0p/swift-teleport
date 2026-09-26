@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **334 tests** pass (172 XCTest + 162
+Expected: build clean (no warnings), **359 tests** pass (199 XCTest + 160
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds.
@@ -74,11 +74,16 @@ follow-up commits on the same branch; the PR description records the rounds.
   fail-closed gate.
 
 ### Transport / TLS change
-- `TeleportTLSTrustTests` (47) + `SSHTLSTransportTests` (15, including the
-  pump-fd single-ownership guard) green, including
-  the loopback handshake and the fail-closed DER matrix.
+- `TeleportTLSTrustTests` + `SSHTLSTransportTests` (including the pump-fd
+  single-ownership guard) + `SSHTLSTransportPumpFDCloserTests` (fd-reuse via
+  `dup2`, the source tripwire, and the `SO_NOSIGPIPE` SIGPIPE counterfactual)
+  green, including the loopback handshake and the fail-closed DER matrix.
 - Re-check the `nonisolated` markers on `TeleportTLSTrust` and
-  `TeleportLogging` if isolation changed.
+  `TeleportLogging` if isolation changed, and — when `SSHTLSTransport`,
+  `PumpFDCloser`, or any coordinator/generator/keyring class is touched — that
+  `PumpFDCloser` stays `nonisolated final class` and the touched class keeps
+  its `nonisolated deinit {}`. `TeleportSynchronousReleaseTests` traps at exit
+  without the deinit markers.
 
 ### gRPC / protobuf change
 - `ProtoWireCompatTests` green (the golden bytes are the wire contract).
@@ -91,8 +96,11 @@ follow-up commits on the same branch; the PR description records the rounds.
 - `SEPSignerAlgorithmTests` + `WebAuthnResponseJSONTests` green.
 
 ### Coordinator / keyring change
-- `TeleportKeyRingTests` + `TeleportCoordinatorSmokeTests` green; the
-  redaction pins (`TeleportRedactionTests`) green when a log site changes.
+- `TeleportKeyRingTests` + `TeleportCoordinatorSmokeTests` +
+  `TeleportBootstrapCoordinatorGenerationTests` (stale-continuation guards) +
+  `TeleportBootstrapCoordinatorTimeoutTests` green; the redaction pins
+  (`TeleportRedactionTests`) + `TeleportFrozenTextTests` green when a log site
+  or an error text changes.
 
 ### Test change
 - The package-owned suites may use the `TeleportTesting` mocks; they must not

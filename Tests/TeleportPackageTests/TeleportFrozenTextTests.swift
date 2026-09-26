@@ -12,6 +12,7 @@
 //
 
 import Foundation
+import Security
 import XCTest
 @testable import TeleportCore
 @testable import TeleportAuth
@@ -27,6 +28,12 @@ nonisolated final class TeleportFrozenTextTests: XCTestCase {
         XCTAssertEqual(SignerError.keyNotFound.description, "credential not found")
         XCTAssertEqual(SignerError.signingFailed("boom").description, "signing failed: boom")
         XCTAssertEqual(SignerError.invalidPublicKey("boom").description, "invalid public key: boom")
+        // The additive typed case keeps the identical shape, so every existing
+        // string-fallback consumer (and this frozen contract) is unchanged.
+        XCTAssertEqual(
+            SignerError.biometricSigningFailed("boom", errSecUserCanceled).description,
+            "signing failed: boom"
+        )
     }
 
     /// `SignerError` must stay `LocalizedError`: `TeleportLoginCoordinator`
@@ -178,6 +185,122 @@ nonisolated final class TeleportFrozenTextTests: XCTestCase {
             return XCTFail("expected .faceIDUnavailable for an unrecognized signer failure")
         }
         XCTAssertTrue(message.contains("some other failure"))
+    }
+
+    /// The real biometric path throws a typed `biometricSigningFailed` carrying
+    /// a Security-framework `OSStatus` (there is no `LAContext` in the Teleport
+    /// feature). Classification must key off that status, not the OS-localized
+    /// text, so a non-English cancel message still maps to `.faceIDCancelled`.
+    @MainActor
+    func testMapSignerError_classifiesCancelledOSStatusRegardlessOfLocale() async {
+        let coordinator = TeleportLoginCoordinator(
+            httpClient: MockTeleportHTTPClient(),
+            keyRing: MockTeleportKeyRing(),
+            logging: DefaultTeleportLogging(subsystem: "vvterm-tests")
+        )
+
+        XCTAssertEqual(
+            coordinator.mapSignerError(
+                SignerError.biometricSigningFailed(
+                    "Der Benutzer hat Face ID abgebrochen.",
+                    errSecUserCanceled
+                )
+            ),
+            .faceIDCancelled
+        )
+    }
+
+    /// A message that carries a *more specific* state than the generic cancel
+    /// wins over the typed `errSecUserCanceled` status (S3): a real lockout /
+    /// not-enrolled outcome surfaced with the cancel status must not be
+    /// presented as a benign user cancel. This restores the pre-typed
+    /// behaviour for exactly the colliding inputs while the locale-independent
+    /// typed classification still handles the non-English cancel case above.
+    @MainActor
+    func testMapSignerError_specificMessageWinsOverCancelledOSStatus() async {
+        let coordinator = TeleportLoginCoordinator(
+            httpClient: MockTeleportHTTPClient(),
+            keyRing: MockTeleportKeyRing(),
+            logging: DefaultTeleportLogging(subsystem: "vvterm-tests")
+        )
+
+        XCTAssertEqual(
+            coordinator.mapSignerError(
+                SignerError.biometricSigningFailed(
+                    "LAError: biometry lockout",
+                    errSecUserCanceled
+                )
+            ),
+            .faceIDUnavailable("Face ID is locked. Enter your passcode to unlock Face ID, then try again.")
+        )
+        XCTAssertEqual(
+            coordinator.mapSignerError(
+                SignerError.biometricSigningFailed(
+                    "LAError: biometry not enrolled",
+                    errSecUserCanceled
+                )
+            ),
+            .faceIDUnavailable("Face ID isn't available. Set up Face ID in iOS Settings.")
+        )
+    }
+
+    /// Only `errSecUserCanceled` is confidently attributable. `errSecAuthFailed`
+    /// is a generic authentication failure, so it must fall through to the
+    /// string fallback and keep the raw description rather than be reported as
+    /// a Face ID cancellation.
+    @MainActor
+    func testMapSignerError_errSecAuthFailedIsNotTreatedAsCancel() async {
+        let coordinator = TeleportLoginCoordinator(
+            httpClient: MockTeleportHTTPClient(),
+            keyRing: MockTeleportKeyRing(),
+            logging: DefaultTeleportLogging(subsystem: "vvterm-tests")
+        )
+
+        let mapped = coordinator.mapSignerError(
+            SignerError.biometricSigningFailed(
+                "Der Authentifizierungsvorgang ist fehlgeschlagen.",
+                errSecAuthFailed
+            )
+        )
+        XCTAssertEqual(
+            mapped,
+            .faceIDUnavailable("signing failed: Der Authentifizierungsvorgang ist fehlgeschlagen.")
+        )
+    }
+
+    /// The mock's failure outcomes throw the typed case the production signer
+    /// throws, so the coordinator is exercised on the real error shape (the
+    /// cancel status types, the unattributable statuses fall back to text).
+    @MainActor
+    func testMockSignerOutcomesExerciseTheTypedPath() async {
+        let coordinator = TeleportLoginCoordinator(
+            httpClient: MockTeleportHTTPClient(),
+            keyRing: MockTeleportKeyRing(),
+            logging: DefaultTeleportLogging(subsystem: "vvterm-tests")
+        )
+
+        func thrown(from signer: MockSEPKeySigner) -> Error {
+            do {
+                _ = try signer.createKey(credentialID: Data([1, 2, 3]))
+                XCTFail("the mock must throw for a non-success outcome")
+                return SignerError.signingFailed("unexpected success")
+            } catch {
+                return error
+            }
+        }
+
+        XCTAssertEqual(
+            coordinator.mapSignerError(thrown(from: MockSEPKeySigner(outcome: .cancelled))),
+            .faceIDCancelled
+        )
+        XCTAssertEqual(
+            coordinator.mapSignerError(thrown(from: MockSEPKeySigner(outcome: .lockout))),
+            .faceIDUnavailable("Face ID is locked. Enter your passcode to unlock Face ID, then try again.")
+        )
+        XCTAssertEqual(
+            coordinator.mapSignerError(thrown(from: MockSEPKeySigner(outcome: .notEnrolled))),
+            .faceIDUnavailable("Face ID isn't available. Set up Face ID in iOS Settings.")
+        )
     }
 }
 

@@ -52,6 +52,11 @@ import os.log
 /// (`TeleportKeyRingStoring`) is declared in `Core/Teleport`.
 @MainActor
 public final class TeleportKeyRing: ObservableObject, TeleportCredentialStore {
+    // Explicit nonisolated deinit: the compiler-synthesized deinit of a
+    // MainActor-isolated class takes the back-deployed isolated-deinit path,
+    // which aborts (invalid free) when released outside a task context —
+    // swiftlang/swift#85663, #88036. Empty body, no behavior change.
+    nonisolated deinit {}
     /// The UserDefaults key for the encoded `[UUID: TeleportCredential]` map.
     private let credentialsKey = "vvterm.teleport.credentials"
 
@@ -172,7 +177,7 @@ public final class TeleportKeyRing: ObservableObject, TeleportCredentialStore {
         cred.deviceName = deviceName
         credentials[clusterId] = cred
         save()
-        logger.info("stored SEP key metadata for cluster \(clusterId.uuidString, privacy: .public), device=\(deviceName, privacy: .public)")
+        logger.info("stored SEP key metadata for cluster \(clusterId.uuidString, privacy: .public), device=\(deviceName, privacy: .private)")
     }
 
     public func storeLoginCert(_ certPEM: String, validBefore: Date, for clusterId: UUID) {

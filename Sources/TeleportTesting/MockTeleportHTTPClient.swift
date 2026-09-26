@@ -43,6 +43,10 @@ public final class MockTeleportHTTPClient: TeleportHTTPClienting {
     /// The scripted Phase-3 `/mfa/login/begin` response.
     public var scriptedLoginBeginResponse: LoginBeginResponse?
 
+    /// The scripted Phase-3 `/mfa/login/begin` error. Thrown when set (takes
+    /// precedence over the scripted response).
+    public var scriptedLoginBeginError: Error?
+
     /// The scripted Phase-3 `/mfa/login/finish` response.
     public var scriptedLoginFinishResponse: LoginFinishResponse?
 
@@ -88,6 +92,9 @@ public final class MockTeleportHTTPClient: TeleportHTTPClienting {
     // MARK: - Login begin/finish (Phase 3)
 
     public func loginBegin(baseURL: URL) async throws -> LoginBeginResponse {
+        if let error = scriptedLoginBeginError {
+            throw error
+        }
         if let response = scriptedLoginBeginResponse {
             return response
         }
