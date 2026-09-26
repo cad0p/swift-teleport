@@ -18,6 +18,12 @@ tree:
   mocks + `iotest_mfa.proto` + the regen script** from `291d75fb` (which
   carries the Stage A rewrite) and splits them into `TeleportCore` +
   `TeleportAuth` + `TeleportTesting`.
+- **v0.2.1** ports the post-import host fixes so the package tracks the host:
+  `3d78bc58` (single-owner pump-fd close + `SO_NOSIGPIPE`, wire-error log
+  redaction), `7b8499e4` (request-generation stale-continuation guards,
+  `nonisolated` deinit markers, OSStatus signer classification), and
+  `05764aa2` (GCM-gated browser-MFA callback, nested SEP private-key
+  attributes). The parity inventory is below.
 
 The import preserves file content except for:
 
@@ -49,22 +55,29 @@ The import preserves file content except for:
    live in the test targets). `SoftwareSigner` moves from `TeleportCore` to
    `TeleportTesting` (and `package` → `public`) because its only consumers are
    test targets.
-5. **One deliberate behaviour fix** — `SSHTLSTransport`'s pump end is now
-   closed through a single-owner guard (`PumpFDCloser`). The host closes that
-   fd from six racing paths and treats a repeated `close(2)` as harmless; it is
-   not — if the fd number has been reused for another file, the close lands on
-   the wrong file and the next read there fails with `EBADF`. Found via a
-   spurious fixture-read failure under the package's parallel `swift test`; the
-   host carries the identical code and hazard
-   ([`cad0p/vvterm#234`](https://github.com/cad0p/vvterm/issues/234)). Two
-   regression tests pin the guard, including a source-level pin that no raw
-   `Darwin.close(...pumpFD...)` reappears.
+5. **Pump-fd single ownership** — v0.2.0's `SSHTLSTransport` carried the
+   old-shape pump end that the host then had too: six racing close paths and a
+   repeated `close(2)` treated as harmless. It is not — if the fd number has
+   been reused for another file, the close lands on the wrong file and the next
+   read there fails with `EBADF`. Found via a spurious fixture-read failure
+   under the package's parallel `swift test`
+   ([`cad0p/vvterm#234`](https://github.com/cad0p/vvterm/issues/234)). v0.2.1
+   **ports the host's fix** (`3d78bc58`): every close routes through a
+   fd-less `PumpFDCloser.closeOnce(_:)`, and `makeSocketPair()` sets
+   `SO_NOSIGPIPE` on both ends (the `shutdown`+`close` shape makes a racing
+   write return `EPIPE`, which would otherwise raise `SIGPIPE`). The guard and
+   the sockopt are now **parity with the host**, not a package-only divergence.
+   Three XCTest cases pin the guard (fd-reuse via `dup2`, a source-level pin
+   that no raw `Darwin.close(...pumpFD...)` reappears, and a SIGPIPE
+   counterfactual).
 
-Nothing else changed.
+Beyond the access-level/module/isolated-deinit adaptations above and the
+v0.2.1 parity ports, the imported file content is unchanged from the host's
+post-`05764aa2` shapes.
 
 ## Imported set (v0.2.0 additions: 32 files + proto + script)
 
-### `TeleportCore` additions (19 files + the IDL)
+### `TeleportCore` additions (20 files + the IDL; 19 at v0.2.0 + `TeleportErrorRedaction.swift` at v0.2.1)
 
 | Path | Origin |
 | --- | --- |
@@ -76,6 +89,7 @@ Nothing else changed.
 | `Infrastructure/HeadlessLogin.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
 | `Infrastructure/MFALoginWireTypes.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
 | `Infrastructure/TeleportTrustSession.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+| `Infrastructure/TeleportErrorRedaction.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
 | `Infrastructure/TLSKeyPair.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
 | `Infrastructure/BrowserMFAListener.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
 | `Infrastructure/BrowserMFACeremony.swift` | `VVTerm/Features/Teleport/Infrastructure/` |

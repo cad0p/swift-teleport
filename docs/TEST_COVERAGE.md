@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **334 tests** across two frameworks and three targets:
+`swift test` runs **359 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
-| `TeleportCoreTests` | Swift Testing | 6 | 118 |
-| `TeleportCoreTests` | XCTest | 5 | 72 |
+| `TeleportCoreTests` | Swift Testing | 6 | 116 |
+| `TeleportCoreTests` | XCTest | 6 | 75 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
 | `TeleportPackageTests` | Swift Testing | 5 | 37 |
-| `TeleportPackageTests` | XCTest | 11 | 100 |
-| **Total** | | | **334** |
+| `TeleportPackageTests` | XCTest | 13 | 124 |
+| **Total** | | | **359** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -24,7 +24,8 @@
 | `TeleportDeviceReadinessTests` | XCTest | `TeleportDeviceReadinessResolver` (readiness matrix) |
 | `HeadlessIDTests` | XCTest | `HeadlessID.compute` UUIDv5 golden vectors (4) |
 | `TeleportProxySubsystemTests` | Swift Testing | `TeleportProxySubsystem.request` |
-| `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) + the pump-fd single-ownership guard (15) |
+| `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) (13) |
+| `SSHTLSTransportPumpFDCloserTests` | XCTest | pump-fd single ownership (fd reuse, source tripwire, `SO_NOSIGPIPE`) (3) |
 | `TeleportTLSTrustTests` | Swift Testing | `TeleportTLSTrust` (chain/name/EKU/ALPN + DER fail-closed matrix) |
 | `TeleportIssuedCertValidatorTests` | Swift Testing | issued-cert binding checks (11) |
 | `TeleportCertBindingCoordinatorTests` | Swift Testing | the coordinators store nothing on a cert/key mismatch (10) |
@@ -36,10 +37,12 @@
 | `WebAuthnResponseJSONTests` | XCTest | registration/assertion response JSON (7) |
 | `HeadlessLoginWireTests` | XCTest | `HeadlessLogin.post` (URL/200-only/error mapping) + coordinator failure paths (16) |
 | `TeleportLoginWireTests` | XCTest | `LoginFinishReq` v16/v17 field compat (1) |
-| `SEPSignerAlgorithmTests` | XCTest | signer algorithm/label contract (1) |
-| `TeleportFrozenTextTests` | XCTest | frozen error texts + listener defaults wiring (10) |
-| `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime) (6) |
-| `TeleportBootstrapCoordinatorTimeoutTests` | XCTest | timeout classification (9) |
+| `SEPSignerAlgorithmTests` | XCTest | signer algorithm/label contract + nested SEP key attributes (2) |
+| `TeleportFrozenTextTests` | XCTest | frozen error texts + listener defaults wiring + OSStatus signer classification (14) |
+| `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime + listener rejection reasons) (16) |
+| `TeleportBootstrapCoordinatorTimeoutTests` | XCTest | timeout classification + wrapped-cancel asymmetry (10) |
+| `TeleportBootstrapCoordinatorGenerationTests` | XCTest | stale-continuation request-generation guards (7) |
+| `TeleportSynchronousReleaseTests` | XCTest | isolated-deinit synchronous release (1) |
 
 ## New package-local suites
 
