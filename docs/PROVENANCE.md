@@ -24,6 +24,14 @@ tree:
   `nonisolated` deinit markers, OSStatus signer classification), and
   `05764aa2` (GCM-gated browser-MFA callback, nested SEP private-key
   attributes). The parity inventory is below.
+- **v0.2.2** (the release follow-up to this port) carries `30ac5388` — the
+  #262 host-login resolution: the SSH username must be a certificate
+  principal, not the Teleport user. It ports the
+  resolver, the validator's non-internal-principal guard, the
+  `success(certValidUntil:logins:)` payload, the coordinator keyID bindings,
+  the fail-closed readiness order, the keyring `certExpiry`/
+  `liveCredentialSnapshot`/reuse helpers, and the credential-invalidation
+  seam. Two host-type couplings are deliberately generalized (below).
 
 The import preserves file content except for:
 
@@ -72,8 +80,33 @@ The import preserves file content except for:
    counterfactual).
 
 Beyond the access-level/module/isolated-deinit adaptations above and the
-v0.2.1 parity ports, the imported file content is unchanged from the host's
-post-`05764aa2` shapes.
+v0.2.1/v0.2.2 parity ports, the imported file content is unchanged from the
+host's post-`30ac5388` shapes.
+
+### v0.2.2 `Server`-free generalizations (deliberate)
+
+The #262 host code named two host types; the package carries neither:
+
+- **Host-login normalizer** — the host's `Server.normalizedTeleportHostLogin`
+  moved in as `TeleportHostLogin.normalized(_:)` +
+  `package maxTeleportHostLoginBytes` (byte-identical semantics: trim, reject
+  empty / >255 UTF-8 bytes / control characters, allow `@`). The host's
+  `Server` delegates to it in Phase 2. The constant stays `package` because
+  only the normalizer consumes it host-side.
+- **Reuse row** — the host's `TeleportCredentialReuse.match(newServer:
+  liveServers:…) -> Server?` became
+  `match<Row: TeleportCredentialReuseRow>(newRow:liveRows:…) -> Row?`; the
+  host's `Server` conforms to `TeleportCredentialReuseRow` in Phase 2. The
+  matching semantics (host + Teleport user, Face-ID-Teleport on both sides,
+  credential record, injected completeness gate, cluster-name rule,
+  name-sorted first pick) are unchanged.
+
+Host-only #262 files (not imported): `TeleportLoginView` (SwiftUI picker),
+`TeleportKeyRing+Reuse` (orchestration over `Server`),
+`SSHError+TeleportHostLogin` (the app-only fail-closed route),
+`ServerManager` invalidation wiring + `Server`/`Server+CloudKit`, the
+`TeleportKeyRingCredentialStore`/`TeleportKeyRingStoring` deltas, and the
+`SSHClient` connect-site redaction deltas.
 
 ## Imported set (v0.2.0 additions: 32 files + proto + script)
 
@@ -112,6 +145,14 @@ post-`05764aa2` shapes.
 | `Application/TeleportRegistrationCoordinator.swift` | `VVTerm/Features/Teleport/Application/` |
 | `Application/TeleportKeyRing.swift` | `VVTerm/Features/Teleport/Application/` |
 | `Infrastructure/TeleportHTTPClient.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
+
+### v0.2.2 additions (3 files)
+
+| Path | Origin |
+| --- | --- |
+| `Domain/TeleportHostLogin.swift` | `VVTerm/Features/Teleport/Domain/` |
+| `Domain/TeleportCredentialReuse.swift` | `VVTerm/Features/Teleport/Domain/` |
+| `Application/TeleportCredentialInvalidating.swift` | `VVTerm/Core/Teleport/` (host-only path; the record-level invalidation seam) |
 
 ### `TeleportTesting` (8 files)
 

@@ -17,9 +17,11 @@ Sources/
 │   │   ├── TeleportCluster.swift                cluster config model
 │   │   ├── TeleportClusterTLSState.swift        persisted cluster trust anchors
 │   │   ├── TeleportCredential.swift             registered SEP key + cert metadata
+│   │   ├── TeleportCredentialReuse.swift        generalized duplicate-row reuse matcher
 │   │   ├── TeleportCredentialStore.swift        seam: credential store protocol
 │   │   ├── TeleportDeviceName.swift             MFA device-name sanitization
 │   │   ├── TeleportDeviceReadiness.swift        derived readiness resolver
+│   │   ├── TeleportHostLogin.swift              SSH-username (host-login) resolver
 │   │   ├── TeleportIssuedCertValidator.swift    issued-cert binding checks
 │   │   ├── TeleportKeychainConfig.swift         keychain service + defaults injection
 │   │   ├── TeleportLogging.swift                seam: os.Logger factory
@@ -49,6 +51,7 @@ Sources/
 ├── TeleportAuth/                  coordinators + persistence
 │   ├── Application/
 │   │   ├── TeleportBootstrapCoordinator.swift   Phase 1 (headless bootstrap)
+│   │   ├── TeleportCredentialInvalidating.swift credential-invalidation seam + rule
 │   │   ├── TeleportLoginCoordinator.swift       Phase 3 (passwordless login)
 │   │   ├── TeleportRegistrationCoordinator.swift Phase 2 (SEP registration)
 │   │   └── TeleportKeyRing.swift                per-cluster credential store
@@ -72,7 +75,8 @@ its composition root:
 
 | Protocol | Host responsibility |
 | --- | --- |
-| `TeleportCredentialStore` | per-cluster cert/key/TLS-state persistence |
+| `TeleportCredentialStore` | per-cluster cert/key/TLS-state persistence (including the paired `liveCredentialSnapshot`) |
+| `TeleportCredentialInvalidating` | record-level credential presence / keyID / clear, consumed by the host's `ServerManager` invalidation rule |
 | `TeleportLogging` | `os.Logger` factory (preserves the app subsystem + category strings) |
 | `BrowserMFAPresenting` / `BrowserMFASessionHandle` | `ASWebAuthenticationSession` + presentation anchor |
 | `WebAuthenticationSessionPresenting` | the headless-flow Safari presenter |
@@ -137,14 +141,24 @@ that drive the app's sheets:
   fallback), creates the SEP key, builds the WebAuthn registration response,
   and calls `AddMFADeviceSync`.
 - **Phase 3 `TeleportLoginCoordinator`** — loads the registered SEP key, runs
-  `login/begin` + `login/finish`, and stores the new cert.
+  `login/begin` + `login/finish`, and stores the new cert. Both coordinators
+  bind the issued cert's `keyID` to the configured Teleport user and clear the
+  credential + fail closed on a mismatch; the login success state carries the
+  cert's non-internal principals for the setup picker.
 
 `TeleportKeyRing` is the per-cluster credential owner: UserDefaults holds the
 metadata + certs + cluster TLS state (via an injected store), the keychain
 holds the ed25519 private key, and the SEP key itself lives in the Secure
 Enclave. Readiness is derived locally through
-`TeleportDeviceReadinessResolver`; the Host CA key refresh is additions-only
-(`TeleportHostKeyUpdatePolicy`).
+`TeleportDeviceReadinessResolver` (fail-closed on missing Host CA anchors); the
+Host CA key refresh is additions-only (`TeleportHostKeyUpdatePolicy`). The
+keyring also owns the reuse helpers (`isReusableRegistrationSource` /
+`seedRegistration`, which copy metadata + cluster TLS state only) and conforms
+to `TeleportCredentialInvalidating`, whose pure
+`TeleportCredentialInvalidationPolicy` the host's `ServerManager` applies on
+identity edits. `TeleportHostLogin` resolves the SSH username from the exact
+certificate being sent; `TeleportCredentialReuse` is the pure matcher over the
+host-conformable `TeleportCredentialReuseRow`.
 
 ## Concurrency invariants
 

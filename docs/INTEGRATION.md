@@ -32,7 +32,12 @@ its composition root:
    subsystem (bundle id) and the existing category strings, so the diagnostics
    export (which filters by `subsystem == bundleID`) keeps working.
 2. **`TeleportCredentialStore`** — the host keyring (`TeleportKeyRing`),
-   exposed directly or through a MainActor-hop adapter.
+   exposed directly or through a MainActor-hop adapter. The seam includes
+   `liveCredentialSnapshot(for:)`, the one-read cert + paired ed25519 key the
+   connect path resolves the SSH username against. The host also wires
+   `TeleportCredentialInvalidating` (the keyring conforms) into
+   `ServerManager`, which applies `TeleportCredentialInvalidationPolicy` on
+   row edits / CloudKit merges / deletes.
 3. **`BrowserMFAPresenting` / `WebAuthenticationSessionPresenting`** — own
    `ASWebAuthenticationSession`, the `vvterm` callback scheme, and the
    presentation anchor.
@@ -101,12 +106,35 @@ mirrors it as a compile-time contract in a separate package (so it sees only
 
 The package throws `TeleportPackageError` (transport/keychain) and its own
 flow errors (`HeadlessError`, `GRPCError`, `SignerError`,
-`TeleportBootstrapError`/`TeleportLoginError`/`TeleportRegistrationError`).
+`TeleportBootstrapError`/`TeleportLoginError`/`TeleportRegistrationError`,
+`TeleportHostLoginFailure`).
 The host maps `TeleportPackageError` back to its own `SSHError` /
 `KeychainError` at the seam boundary so existing `error as? SSHError`
 classification (disconnect-before-retry, diagnostics rendering) keeps
 working. The user-visible descriptions are byte-identical
 (`connectionFailed` → "Connection failed: …", `keychain` → "Keychain error: …").
+
+The host's `SSHClient` maps a `TeleportHostLoginFailure` to its
+`SSHError.teleportHostLoginUnresolvable` (an app-only case) and renders the
+failure into logs/diagnostics through `caseDescription` — never the principal
+array, which is identity material. The user-facing text is
+`errorDescription`.
+
+## Host-login (SSH username) adoption
+
+The connect path must send a certificate principal, not the Teleport user
+(Teleport's `CertChecker` rejects a username outside the cert's
+`ValidPrincipals`). Phase 2 adoption:
+
+- resolve with `TeleportHostLogin.resolve(cert:storedLogin:)` against the
+  exact PEM read via `liveCredentialSnapshot`; a failure clears the credential
+  and fails closed;
+- conform `Server` to `TeleportCredentialReuseRow` and delegate
+  `Server.normalizedTeleportHostLogin` to `TeleportHostLogin.normalized(_:)`;
+- drive the setup picker from `TeleportLoginState.success(…, logins:)` with
+  `TeleportHostLogin.initialSelection(logins:stored:)`;
+- bind `cert.keyID == cluster.username` at every issue site (the coordinators
+  already do it; the host's connect path re-checks it).
 
 ## What v0.2.0 provides
 

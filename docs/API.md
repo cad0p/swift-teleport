@@ -20,7 +20,7 @@ public struct DefaultTeleportLogging: TeleportLogging {
     public nonisolated func logger(category: String) -> Logger
 }
 
-public protocol TeleportCredentialStore: Sendable { /* 12 async members */ }
+public protocol TeleportCredentialStore: Sendable { /* 13 async members */ }
 
 @MainActor public protocol BrowserMFASessionHandle: AnyObject, Sendable { … }
 @MainActor public protocol BrowserMFAPresenting: Sendable { … }
@@ -96,6 +96,38 @@ public enum OpenSSHHostCertVerifier { public static func verify(…) -> OpenSSHH
 public struct TeleportCluster { public init(…); public var sepKeyLabel }
 public struct TeleportCredential { public init(…); public var isCertValid }
 public enum TeleportDeviceReadiness { … }
+
+// The Teleport SSH-username resolver (the #262 host-login fix): the stored
+// login is used only while it is a principal of the exact certificate being
+// sent; otherwise a single non-internal principal is derived; zero or several
+// principals fail closed with a named error. `normalized` is the host's
+// `Server.normalizedTeleportHostLogin` shape rule.
+public enum TeleportHostLoginFailure: Error, Equatable, LocalizedError, CustomStringConvertible {
+    public var caseDescription: String   // case name only (never the principals)
+    public var description: String       // == caseDescription
+    public var errorDescription: String? // the user-facing text
+}
+public enum TeleportHostLogin {
+    public static func resolve(cert: OpenSSHCertificate, storedLogin: String?) -> Result<String, TeleportHostLoginFailure>
+    public static func initialSelection(logins: [String], stored: String?) -> String?
+    public static func normalized(_ raw: String?) -> String?
+}
+
+// Duplicate-row credential reuse, generalized over the host's `Server` shape.
+public protocol TeleportCredentialReuseRow {
+    var id: UUID { get }
+    var displayName: String { get }
+    var host: String { get }
+    var username: String { get }
+    var isFaceIDTeleport: Bool { get }
+}
+public enum TeleportCredentialReuse {
+    public typealias IsReusable = (UUID) -> Bool
+    public static func match<Row: TeleportCredentialReuseRow>(
+        newRow: Row, liveRows: [Row], credentials: [UUID: TeleportCredential],
+        clusterName: (UUID) -> String?, isReusable: IsReusable
+    ) -> Row?
+}
 public enum TeleportDeviceName { public static func `default`/sanitize/validate }
 public struct TeleportKeychainConfig: @unchecked Sendable { public init(keychainService:defaults:) }
 public enum TeleportHostKeyUpdatePolicy { public static func apply(…); matchesPinnedCluster(…) }
@@ -141,6 +173,9 @@ freeze them against future refactors.
 package enum TeleportIssuedCertValidator { package enum Failure; … }
 package enum TeleportWebAuthnRPID { package enum ResolveError; … }
 package struct TeleportDeviceReadinessResolver { … }
+// `package` members of the public resolver enum (no host production caller):
+// TeleportHostLogin.resolveUsername(certPEM:storedLogin:),
+// TeleportHostLogin.nonInternalPrincipals(of:), TeleportHostLogin.maxTeleportHostLoginBytes.
 package enum TLSKeyPairGen { package static func generate() throws -> TLSKeyPair }
 package enum SignerError: Error, LocalizedError, CustomStringConvertible { … }
 package enum CBOR { … }
@@ -169,6 +204,20 @@ public enum TeleportBootstrapState / TeleportBootstrapError { … }
 @MainActor public protocol TeleportLoginCoordinating: AnyObject, ObservableObject { … }
 @MainActor public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoordinating { … }
 public enum TeleportLoginState / TeleportLoginError { … }
+// `TeleportLoginState.success` carries the issued certificate's non-internal
+// principals: `.success(certValidUntil: Date, logins: [String])`.
+
+@MainActor public protocol TeleportCredentialInvalidating: AnyObject {
+    func hasCredential(for serverId: UUID) -> Bool
+    func certKeyID(for serverId: UUID) -> String?
+    func clearCredential(for serverId: UUID)
+}
+public enum TeleportCredentialInvalidationPolicy {
+    public static func shouldClearCredential(
+        oldHost: String, newHost: String, oldUsername: String, newUsername: String,
+        hasCredential: Bool, certKeyID: String?
+    ) -> Bool
+}
 
 @MainActor public protocol TeleportRegistrationCoordinating: AnyObject, ObservableObject { … }
 @MainActor public final class TeleportRegistrationCoordinator: ObservableObject, TeleportRegistrationCoordinating { … }
@@ -178,7 +227,10 @@ public enum TeleportRegistrationState / TeleportRegistrationError { … }
     public init(signer:logging:config:)
     @Published public private(set) var credentials: [UUID: TeleportCredential]
     public func readiness(for:) -> TeleportDeviceReadiness
-    // + the TeleportCredentialStore witnesses
+    public func liveCredentialSnapshot(for:) -> (certPEM: String, privateKeyPEM: Data)?
+    public func isReusableRegistrationSource(for:clusterName:) -> Bool
+    @discardableResult public func seedRegistration(from:to:) -> Bool
+    // + the TeleportCredentialStore and TeleportCredentialInvalidating witnesses
 }
 
 public struct TeleportHTTPClient { public init(baseURL:); public struct HeadlessLoginResult / LoginBeginResult; … }
@@ -199,9 +251,13 @@ the SEP ceremony testable without hardware. It is a test double, so it lives
 here rather than in `TeleportCore` — that is also what lets the kept host-side
 `TeleportServerIntegrationTests` construct it from a different package.
 
-`MockTeleportKeyRing` conforms only to `TeleportCredentialStore`; the host
-restores its `TeleportKeyRingStoring` observation conformance by extension in
-Phase 2.
+`MockTeleportKeyRing` conforms only to `TeleportCredentialStore` and
+`TeleportCredentialInvalidating`; the host restores its `TeleportKeyRingStoring`
+observation conformance by extension in Phase 2. It also mirrors the reuse
+helpers (`liveCredentialSnapshot`, `isReusableRegistrationSource`,
+`seedRegistration`). `MockTeleportLoginCoordinator`'s
+`happyPath`/`certExpiredOnTap` scenarios carry a `logins: [String]` payload
+(defaulted to `["deploy"]`).
 
 ## Enforcement
 
