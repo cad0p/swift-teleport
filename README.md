@@ -14,11 +14,12 @@ app supply its own keychain, logging, credential store, and in-app browser.
 
 ## Status
 
-`v0.3.0` is the current release of the **full client product set** (D5):
+`v0.2.1` is the current release of the **full client product set** (D5):
 `TeleportCore`, `TeleportAuth`, and `TeleportTesting`. It ships the
 gRPC/protobuf transport (SwiftNIO + SwiftProtobuf), the WebAuthn/SEP machinery
 with the byte-exact Go-generated fixture oracle, the three coordinators, the
-keyring, the host-login (SSH username) resolver, and the UI-free mocks. See
+keyring, and the UI-free mocks. The next release adds the host-login
+(SSH username) resolver. See
 [`docs/PROVENANCE.md`](docs/PROVENANCE.md) for exactly what is in and out, and
 [`docs/INTEGRATION.md`](docs/INTEGRATION.md) for the Phase-2 adoption path.
 
