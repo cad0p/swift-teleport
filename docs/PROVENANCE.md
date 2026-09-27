@@ -32,6 +32,10 @@ tree:
   the fail-closed readiness order, the keyring `certExpiry`/
   `liveCredentialSnapshot`/reuse helpers, and the credential-invalidation
   seam. Two host-type couplings are deliberately generalized (below).
+- **v0.3.1** carries `96bbf74a` — the #22 identity-leak hardening: the
+  bootstrap log no longer publishes the Teleport username
+  (`privacy: .private`), and `TeleportHostLoginFailure` renders payload-free
+  under reflection (`CustomReflectable` + `CustomDebugStringConvertible`).
 
 The import preserves file content except for:
 
