@@ -45,8 +45,9 @@ package struct TeleportDeviceReadinessResolver {
     /// Returns the live cert's ValidBefore, or nil if no cert.
     package typealias CertExpiry = (UUID) -> Date?
     /// Returns true if Host CA checking keys are persisted for this cluster.
-    /// Missing keys on an otherwise-registered device route to `.needsLogin`
-    /// (the login response refreshes them) — legacy installs never capture
+    /// Missing keys fail closed in two cases: a device with a cert routes to
+    /// `.needsLogin` (the login response refreshes them), and a device
+    /// without routes to `.needsBootstrap`. Legacy installs never capture
     /// checking keys until their next login.
     package typealias HasHostCAKeys = (UUID) -> Bool
 
