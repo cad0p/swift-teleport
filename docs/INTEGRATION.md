@@ -118,7 +118,9 @@ The host's `SSHClient` maps a `TeleportHostLoginFailure` to its
 `SSHError.teleportHostLoginUnresolvable` (an app-only case) and renders the
 failure into logs/diagnostics through `caseDescription` — never the principal
 array, which is identity material. The user-facing text is
-`errorDescription`.
+`errorDescription`. Reflection on the failure (`dump`/`Mirror`) also renders
+the case name only: the enum's `CustomReflectable` mirror carries a single
+`case` child, not the associated principals.
 
 ## Host-login (SSH username) adoption
 

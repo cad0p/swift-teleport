@@ -256,4 +256,30 @@ struct TeleportHostLoginTests {
         #expect(String(describing: TeleportHostLoginFailure.noPrincipals) == "noPrincipals")
         #expect(String(describing: TeleportHostLoginFailure.certificateUnreadable) == "certificateUnreadable")
     }
+
+    /// The reflection pin: `dump(_:)` and `Mirror(reflecting:)` bypass
+    /// `description` and read the reflection surface, which used to expose the
+    /// associated principal list (`["deploy", "root"]`). The conformance makes
+    /// the reflection surface payload-free — one labelled child carrying the
+    /// stable case name.
+    @Test
+    func failureDescriptionsNeverRenderThePrincipalsThroughReflection() {
+        let ambiguous = TeleportHostLoginFailure.ambiguousPrincipalSet(["deploy", "root"])
+
+        var dumped = ""
+        dump(ambiguous, to: &dumped)
+        #expect(!dumped.contains("deploy"))
+        #expect(!dumped.contains("root"))
+
+        let mirror = Mirror(reflecting: ambiguous)
+        #expect(mirror.children.count == 1)
+        #expect(mirror.children.first?.label == "case")
+        #expect(mirror.children.first.map { String(describing: $0.value) } == ambiguous.caseDescription)
+
+        // Regression guards, not the counterfactual: these render through
+        // `CustomStringConvertible` and already passed before the
+        // `CustomReflectable` conformance.
+        #expect(String(reflecting: ambiguous) == ambiguous.caseDescription)
+        #expect(ambiguous.debugDescription == ambiguous.caseDescription)
+    }
 }

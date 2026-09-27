@@ -86,7 +86,19 @@ The import preserves file content except for:
 
 Beyond the access-level/module/isolated-deinit/plain-literal adaptations above
 and the v0.2.1/v0.3.0 parity ports, the imported file content is unchanged
-from the host's post-`30ac5388` shapes.
+from the host's post-`30ac5388` shapes, except for the #22 hardening below.
+
+### #22 identity-leak hardening (package-ahead)
+
+Two host-parity identity leaks are fixed in the package while the host still
+carries them; the host fix lands in the follow-up `cad0p/vvterm` PR (D2):
+
+- `TeleportBootstrapCoordinator.begin` logs the Teleport username with
+  `privacy: .private` (the host line still publishes it; #15 set the device-name
+  precedent).
+- `TeleportHostLoginFailure` adds `CustomDebugStringConvertible` and
+  `CustomReflectable`, so `dump(_:)`/`Mirror(reflecting:)` render the case name
+  only (the host enum still synthesizes a mirror carrying the principal list).
 
 ### v0.3.0 `Server`-free generalizations (deliberate)
 

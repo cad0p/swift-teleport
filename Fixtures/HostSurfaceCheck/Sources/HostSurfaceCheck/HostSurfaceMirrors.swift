@@ -586,10 +586,13 @@ enum HostHostLoginMirror {
             _ = login
         case .failure(let failure):
             // Logs and diagnostics render the case name only (`description`
-            // too); the user-facing message is `errorDescription`.
+            // and the reflection surface too); the user-facing message is
+            // `errorDescription`.
             _ = failure.caseDescription
             _ = failure.description
             _ = failure.errorDescription
+            _ = failure.debugDescription
+            _ = Mirror(reflecting: failure).children.first
             _ = String(describing: failure)
             _ = TeleportHostLoginFailure.certificateUnreadable
             _ = TeleportHostLoginFailure.noPrincipals
