@@ -325,6 +325,50 @@ nonisolated final class TeleportRedactionTests: XCTestCase {
         }
     }
 
+    /// The bootstrap log used to publish the Teleport username
+    /// (`user=\(cluster.username, privacy: .public)`), so the Teleport user
+    /// reached the unified log and any exported diagnostics. Pin the
+    /// annotation form at the source level for the same reason as the
+    /// device-name pin above: the simulator log store does not mask privacy
+    /// on readback. Exactly one line is allowed to carry the interpolation
+    /// (count tripwire), it must be `.private`, and no `user=` line may
+    /// carry the username together with `.public` — an annotation on the line
+    /// is not enough (the dial target's `.public` sits on the same line by
+    /// design), so the loophole check scopes to the username interpolation's
+    /// own rendering tail.
+    @MainActor
+    func testTeleportBootstrapCoordinator_usernameLogsArePrivacyAnnotated() throws {
+        let source = try String(
+            contentsOf: repositoryRoot().appendingPathComponent(
+                "Sources/TeleportAuth/Application/TeleportBootstrapCoordinator.swift"
+            ),
+            encoding: .utf8
+        )
+        let usernameLines = source
+            .components(separatedBy: "\n")
+            .filter { $0.contains("user=\\(") }
+
+        XCTAssertEqual(
+            usernameLines.count,
+            1,
+            "expected exactly one username log line to review; found: \(usernameLines)"
+        )
+        for line in usernameLines {
+            XCTAssertTrue(
+                line.contains("privacy: .private"),
+                "the Teleport username must be logged with a private privacy annotation: \(line)"
+            )
+            let fromUsername = try XCTUnwrap(
+                line.range(of: "cluster.username").map { String(line[$0.lowerBound...]) },
+                "the username log line must interpolate cluster.username: \(line)"
+            )
+            XCTAssertFalse(
+                fromUsername.contains(".public"),
+                "the Teleport username must not be logged publicly: \(line)"
+            )
+        }
+    }
+
     // MARK: - BrowserMFAListener
 
     /// The callback rejection paths must log a static reason without echoing
