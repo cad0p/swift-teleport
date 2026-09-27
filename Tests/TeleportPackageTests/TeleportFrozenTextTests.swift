@@ -121,6 +121,19 @@ nonisolated final class TeleportFrozenTextTests: XCTestCase {
         )
     }
 
+    // MARK: - TeleportIssuedCertValidator
+
+    /// The `noPrincipals` text is the user-visible
+    /// "Certificate binding check failed: …" payload the coordinators put into
+    /// their failure states, so the wording is an observable contract.
+    @MainActor
+    func testIssuedCertValidator_noPrincipalsTextIsFrozen() {
+        XCTAssertEqual(
+            TeleportIssuedCertValidator.Failure.noPrincipals.errorDescription,
+            "issued cert carries no non-internal principals"
+        )
+    }
+
     // MARK: - Listener contract defaults
 
     /// The wait must outlive the server's 180 s approval window; the socket

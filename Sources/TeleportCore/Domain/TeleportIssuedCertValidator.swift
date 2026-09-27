@@ -8,7 +8,8 @@
 //  The validator enforces the client-side contract for issued certificates:
 //  the returned SSH certificate must be a USER certificate whose public key
 //  is byte-identical to the key that was requested, whose validity window is
-//  sane for the requested TTL, and whose principal set is non-empty. The
+//  sane for the requested TTL, and whose principal set carries at least one
+//  non-internal principal. The
 //  bootstrap additionally binds the returned `tls_cert` to the generated TLS
 //  keypair. Nothing is stored when any check fails; the issued certificate is
 //  only ever evaluated after it has arrived over a verified TLS channel.
@@ -26,7 +27,7 @@ package enum TeleportIssuedCertValidator {
         case notAUserCertificate
         /// The certificate's public key does not match the generated key.
         case publicKeyMismatch
-        /// The certificate has no principals.
+        /// The certificate has no non-internal principals.
         case noPrincipals
         /// The validity window is inconsistent with the requested TTL.
         case invalidValidityWindow(String)
@@ -44,7 +45,7 @@ package enum TeleportIssuedCertValidator {
             case .publicKeyMismatch:
                 return "issued cert public key does not match the requested keypair"
             case .noPrincipals:
-                return "issued cert carries no principals"
+                return "issued cert carries no non-internal principals"
             case .invalidValidityWindow(let detail):
                 return "issued cert validity window is invalid (\(detail))"
             case .tlsCertificateUnreadable:
@@ -81,7 +82,11 @@ package enum TeleportIssuedCertValidator {
         guard cert.publicKeyBlob == expectedPublicKeyBlob else {
             return .failure(.publicKeyMismatch)
         }
-        guard !cert.validPrincipals.isEmpty else {
+        // Internal Teleport principals (`-teleport-internal-join` and any
+        // other `-…` name) are not usable SSH logins, so a cert that carries
+        // only those must be rejected here: otherwise the coordinator reaches
+        // `.success(logins: [])` and the setup step dead-ends with no Continue.
+        guard !TeleportHostLogin.nonInternalPrincipals(of: cert).isEmpty else {
             return .failure(.noPrincipals)
         }
 
