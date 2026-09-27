@@ -592,7 +592,15 @@ enum HostHostLoginMirror {
             _ = failure.description
             _ = failure.errorDescription
             _ = failure.debugDescription
-            _ = Mirror(reflecting: failure).children.first
+            // Name the `CustomReflectable` witness directly.
+            // `Mirror(reflecting:)` is a stdlib initializer that never
+            // references `customMirror`, so it compiles against a type with
+            // no conformance and would pin nothing. Note the demotion this
+            // guards against is rejected by the compiler itself (a public
+            // protocol requirement forces the witness to stay `public`), so
+            // this line is a defensive cross-package name pin, not the gate.
+            _ = failure.customMirror
+            let _: any CustomReflectable = failure
             _ = String(describing: failure)
             _ = TeleportHostLoginFailure.certificateUnreadable
             _ = TeleportHostLoginFailure.noPrincipals

@@ -328,14 +328,20 @@ nonisolated final class TeleportRedactionTests: XCTestCase {
     /// The bootstrap log used to publish the Teleport username
     /// (`user=\(cluster.username, privacy: .public)`), so the Teleport user
     /// reached the unified log and any exported diagnostics. Pin the
-    /// annotation form at the source level for the same reason as the
-    /// device-name pin above: the simulator log store does not mask privacy
-    /// on readback. Exactly one line is allowed to carry the interpolation
-    /// (count tripwire), it must be `.private`, and no `user=` line may
-    /// carry the username together with `.public` — an annotation on the line
-    /// is not enough (the dial target's `.public` sits on the same line by
-    /// design), so the loophole check scopes to the username interpolation's
-    /// own rendering tail.
+    /// **interpolation's own annotation** at the source level for the same
+    /// reason as the device-name pin above: the simulator log store does not
+    /// mask privacy on readback.
+    ///
+    /// Scope, stated honestly: this scans one file and requires exactly one
+    /// `user=\(` line (count tripwire). It then matches the whole
+    /// interpolation — `\(cluster.username, privacy: .private)` (or
+    /// `.sensitive`) — rather than checking that `.private` appears somewhere
+    /// on the line, so a second public interpolation on the same line, or a
+    /// `.private` that belongs to the dial target, cannot satisfy it. What it
+    /// still cannot catch: an alias (`let u = cluster.username`), a `user=`
+    /// line moved to another file, or a reformatted interpolation outside the
+    /// pattern. The runtime behavior is pinned by Apple's privacy semantics,
+    /// not by a simulator readback.
     @MainActor
     func testTeleportBootstrapCoordinator_usernameLogsArePrivacyAnnotated() throws {
         let source = try String(
@@ -353,17 +359,23 @@ nonisolated final class TeleportRedactionTests: XCTestCase {
             1,
             "expected exactly one username log line to review; found: \(usernameLines)"
         )
+
+        let privateInterpolation = try NSRegularExpression(
+            pattern: #"\\\(cluster\.username,\s*privacy:\s*\.(?:private|sensitive)(?:\(mask:\s*\.hash\))?\)"#
+        )
+        let publicInterpolation = try NSRegularExpression(
+            pattern: #"\\\(cluster\.username,\s*privacy:\s*\.public\)"#
+        )
         for line in usernameLines {
-            XCTAssertTrue(
-                line.contains("privacy: .private"),
-                "the Teleport username must be logged with a private privacy annotation: \(line)"
+            let range = NSRange(line.startIndex..<line.endIndex, in: line)
+            XCTAssertEqual(
+                privateInterpolation.numberOfMatches(in: line, range: range),
+                1,
+                "the Teleport username interpolation itself must be annotated `privacy: .private`: \(line)"
             )
-            let fromUsername = try XCTUnwrap(
-                line.range(of: "cluster.username").map { String(line[$0.lowerBound...]) },
-                "the username log line must interpolate cluster.username: \(line)"
-            )
-            XCTAssertFalse(
-                fromUsername.contains(".public"),
+            XCTAssertEqual(
+                publicInterpolation.numberOfMatches(in: line, range: range),
+                0,
                 "the Teleport username must not be logged publicly: \(line)"
             )
         }
