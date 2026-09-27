@@ -62,6 +62,7 @@ FORBIDDEN = re.compile(
     r"|app\.vivy\.vvterm"
     r"|\bSessionMutex\b"
     r"|TeleportKeyRingStoring"
+    r"|String\(localized:"
 )
 
 BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
@@ -146,6 +147,7 @@ def run_selftest() -> int:
         ("let mutex: any TeleportSessionMutex = factory()", False),
         ("let store = TeleportKeyRing.shared", True),
         ("let defaults = UserDefaults.standard", True),
+        ('let message = String(localized: "Certificate unreadable")', True),
         ("extension TeleportKeyRing: TeleportKeyRingStoring {}", True),
         ("let seam: any TeleportCredentialStore = ring", False),
     ]
