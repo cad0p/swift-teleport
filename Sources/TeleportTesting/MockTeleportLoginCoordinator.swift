@@ -8,7 +8,7 @@
 //  Scripts the Phase-3 login state machine for the 5-row matrix in mockup E,
 //  including the Face ID outcomes (which are also assertable via the injected
 //  `MockSEPKeySigner`):
-//    - happyPath(certTTL:) → .success(certValidUntil:) → "Certificate valid for …"
+//    - happyPath(certTTL:) → .success(certValidUntil:logins:) → "Certificate valid for …"
 //    - certExpiredOnTap → flows through login, shows new TTL
 //    - faceIDCancelled → .failed(.faceIDCancelled) → "Face ID cancelled."
 //    - faceIDUnavailable(reason) → .failed(.faceIDUnavailable(msg)) → "Face ID
@@ -36,14 +36,15 @@ public final class MockTeleportLoginCoordinator: ObservableObject, TeleportLogin
     nonisolated deinit {}
     /// The scripted login scenario.
     public enum Scenario: Equatable {
-        /// Happy path: Face ID succeeds, cert issued. The `certValidUntil`
-        /// drives the "Certificate valid for …" copy.
+        /// Happy path: Face ID succeeds, cert issued. The `certValidTTL`
+        /// drives the "Certificate valid for …" copy; `logins` are the
+        /// certificate's non-internal principals (wire order).
         /// - Parameter certTTL: the cert TTL in seconds (12h = 43200, 1h = 3600).
         ///   Proves the TTL is dynamic (read from the cert, not hardcoded).
-        case happyPath(certTTL: TimeInterval)
+        case happyPath(certTTL: TimeInterval, logins: [String] = ["deploy"])
         /// The cert was already expired when the user tapped → flows through
         /// login, shows the new TTL (same as happyPath after refresh).
-        case certExpiredOnTap(certTTL: TimeInterval)
+        case certExpiredOnTap(certTTL: TimeInterval, logins: [String] = ["deploy"])
         /// The user cancelled the Face ID prompt (LAError.userCancel).
         /// → .failed(.faceIDCancelled) → "Face ID cancelled. Tap to try again."
         case faceIDCancelled
@@ -85,14 +86,14 @@ public final class MockTeleportLoginCoordinator: ObservableObject, TeleportLogin
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
 
         switch scenario {
-        case .happyPath(let ttl), .certExpiredOnTap(let ttl):
+        case .happyPath(let ttl, let logins), .certExpiredOnTap(let ttl, let logins):
             state = .awaitingFaceID
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             state = .fetchingCert
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             let validUntil = Date().addingTimeInterval(ttl)
             lastCertValidUntil = validUntil
-            state = .success(certValidUntil: validUntil)
+            state = .success(certValidUntil: validUntil, logins: logins)
         case .faceIDCancelled:
             state = .awaitingFaceID
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))

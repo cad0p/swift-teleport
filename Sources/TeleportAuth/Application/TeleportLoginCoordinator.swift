@@ -48,8 +48,10 @@ public enum TeleportLoginState: Equatable {
     /// The login/finish POST is in flight.
     case fetchingCert
     /// The cert is issued + stored. The `certValidUntil` drives the
-    /// "Certificate valid for …" copy in the login sheet.
-    case success(certValidUntil: Date)
+    /// "Certificate valid for …" copy in the login sheet; `logins` are the
+    /// cert's non-internal principals (wire order) the setup picker offers as
+    /// the host login.
+    case success(certValidUntil: Date, logins: [String])
     /// A step failed. The error drives the recovery UX.
     case failed(TeleportLoginError)
 }
@@ -311,8 +313,10 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
             now: now()
         )
         let certValidBefore: Date
+        let issuedCertificate: OpenSSHCertificate
         switch validation {
         case .success(let cert):
+            issuedCertificate = cert
             certValidBefore = cert.validBeforeDate
         case .failure(let failure):
             logger.error(
@@ -366,7 +370,10 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         }
         logger.info("login succeeded — cert \(certPEM.count) chars, valid until \(certValidBefore.debugDescription, privacy: .public)")
 
-        state = .success(certValidUntil: certValidBefore)
+        state = .success(
+            certValidUntil: certValidBefore,
+            logins: TeleportHostLogin.nonInternalPrincipals(of: issuedCertificate)
+        )
     }
 
     public func cancel() async {

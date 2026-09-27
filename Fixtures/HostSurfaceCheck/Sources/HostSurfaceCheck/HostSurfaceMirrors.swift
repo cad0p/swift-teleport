@@ -718,11 +718,30 @@ enum HostHarnessMirror {
         let bootstrap = MockTeleportBootstrapCoordinator(scenario: .happyPath)
         _ = bootstrap.state
         _ = bootstrap.lastBootstrapResult
-        let login = MockTeleportLoginCoordinator(scenario: .happyPath(certTTL: 3600))
+        let login = MockTeleportLoginCoordinator(scenario: .happyPath(certTTL: 3600, logins: ["deploy"]))
         _ = login.state
         _ = login.lastCertValidUntil
         let registration = MockTeleportRegistrationCoordinator(scenario: .happyPath)
         _ = registration.state
         _ = registration.lastDeviceName
+    }
+
+    /// The host's login sheet switches over every `TeleportLoginState` case;
+    /// `.success` now carries the certificate's non-internal principals (the
+    /// setup picker's host-login choices).
+    static func loginStateShape() {
+        let state = TeleportLoginState.success(
+            certValidUntil: Date(),
+            logins: ["deploy", "root"]
+        )
+        switch state {
+        case .idle, .awaitingFaceID, .fetchingCert:
+            break
+        case .success(let certValidUntil, let logins):
+            _ = certValidUntil
+            _ = logins
+        case .failed(let error):
+            _ = error
+        }
     }
 }

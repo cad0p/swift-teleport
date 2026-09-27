@@ -216,11 +216,14 @@ struct TeleportCoordinatorSmokeTests {
 
         await coordinator.begin(cluster: cluster)
 
-        guard case .success(let validUntil) = coordinator.state else {
+        guard case .success(let validUntil, let logins) = coordinator.state else {
             Issue.record("expected .success, got \(coordinator.state)")
             return
         }
         #expect(validUntil > TeleportFixtureSupport.fixtureClock)
+        // The fixture user cert's single non-internal principal travels to the
+        // setup picker.
+        #expect(logins == ["alice"])
         #expect(http.loginFinishCallCount == 1)
         #expect(keyRing.liveCertPEM(for: cluster.id) != nil)
     }
