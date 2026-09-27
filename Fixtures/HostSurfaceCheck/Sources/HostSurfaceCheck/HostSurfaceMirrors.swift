@@ -537,6 +537,46 @@ enum HostSSHClientMirror {
     }
 }
 
+// MARK: - Mirror: host `TeleportHostLogin` + `TeleportHostLoginFailure`
+
+/// The host's `SSHClient.resolveTeleportAuthMaterial` resolves the SSH
+/// username from the exact certificate it is about to send, the setup step
+/// uses the pure selection policy, and the host's
+/// `Server.normalizedTeleportHostLogin` delegates to the package normalizer in
+/// Phase 2. The failure enum is the payload of the host's
+/// `SSHError.teleportHostLoginUnresolvable`.
+@MainActor
+enum HostHostLoginMirror {
+    /// The committed fixture user certificate (`Tests/TeleportCoreTests/
+    /// Fixtures/OpenSSH/user-cert-ed25519.pub`); the host resolves the login
+    /// against the exact certificate it is about to send.
+    static let fixtureCertPEM = "ssh-ed25519-cert-v01@openssh.com AAAAIHNzaC1lZDI1NTE5LWNlcnQtdjAxQG9wZW5zc2guY29tAAAAIGjD6K4DquQ1HAQyeEcd+oYehmAjE1rjdx7KASjO/iBIAAAAIHQDxUCNiEHAfQCCSmpyKE+zPpgFaxA7CBi9SaE5uZnhAAAAAAAAAAAAAAABAAAAEXVzZXItY2VydC1lZDI1NTE5AAAACQAAAAVhbGljZQAAAABpVbkAAAAAAHwkXwAAAAAAAAAAggAAABVwZXJtaXQtWDExLWZvcndhcmRpbmcAAAAAAAAAF3Blcm1pdC1hZ2VudC1mb3J3YXJkaW5nAAAAAAAAABZwZXJtaXQtcG9ydC1mb3J3YXJkaW5nAAAAAAAAAApwZXJtaXQtcHR5AAAAAAAAAA5wZXJtaXQtdXNlci1yYwAAAAAAAAAAAAAAMwAAAAtzc2gtZWQyNTUxOQAAACA5Enhm8RTFZ41MdNv9APpEmFnywjKHWku2CQ7uJTzH0AAAAFMAAAALc3NoLWVkMjU1MTkAAABAggu4NThmQoXlxJuFC+l2b0p61xemMM/B5mzFKN6fBqWd/PBq1BMogVWf8dkjQ+nQ4irDfEQS0DcGY7L24H7fCQ== vvterm-test-userkey"
+
+    static func resolveAndSelect(storedLogin: String?) -> String? {
+        guard let cert = OpenSSHCertificate.parse(authorizedKeysOrPEM: fixtureCertPEM) else {
+            return nil
+        }
+
+        switch TeleportHostLogin.resolve(cert: cert, storedLogin: storedLogin) {
+        case .success(let login):
+            _ = login
+        case .failure(let failure):
+            // Logs and diagnostics render the case name only (`description`
+            // too); the user-facing message is `errorDescription`.
+            _ = failure.caseDescription
+            _ = failure.description
+            _ = failure.errorDescription
+            _ = String(describing: failure)
+            _ = TeleportHostLoginFailure.certificateUnreadable
+            _ = TeleportHostLoginFailure.noPrincipals
+            _ = TeleportHostLoginFailure.ambiguousPrincipalSet(["deploy", "root"])
+        }
+
+        let normalized = TeleportHostLogin.normalized(storedLogin)
+        return TeleportHostLogin.initialSelection(logins: ["deploy", "root"], stored: normalized)
+    }
+}
+
 // MARK: - Mirror: the host `SSHClient` D6 channel seam + package error surface
 
 /// The host's `SessionMutex` (an `NSLock` wrapper, `@unchecked Sendable`)
