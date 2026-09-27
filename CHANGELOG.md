@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.1] - 2026-09-27
+
+<!-- USER-EDITABLE SECTION START -->
+Identity-leak hardening (#22), matching the host-parity fixes:
+
+- the bootstrap log no longer publishes the Teleport username
+  (`privacy: .private`);
+- `TeleportHostLoginFailure` renders payload-free under reflection
+  (`dump`/`Mirror`) via a `CustomReflectable` mirror carrying the case name
+  only, with `CustomDebugStringConvertible` alongside.
+
+The host half of the same leaks is [`cad0p/vvterm#273`](https://github.com/cad0p/vvterm/issues/273).
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Log the bootstrap username privately and render the host-login failure payload-free (closes #22)
+
+### 📚 Documentation
+
+- Refresh the README status and PROVENANCE version labels for v0.3.0 (closes #25)
+
+
 ## [0.3.0] - 2026-09-27
 
 <!-- USER-EDITABLE SECTION START -->
