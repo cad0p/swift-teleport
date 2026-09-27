@@ -98,6 +98,42 @@ nonisolated final class TeleportFrozenTextTests: XCTestCase {
         XCTAssertEqual(HeadlessError.missingField("cert").errorDescription, "missing field: cert")
     }
 
+    // MARK: - TeleportHostLoginFailure
+
+    /// The host-login failure texts reach the UI through
+    /// `error.localizedDescription` (the host's error mapping wraps them), so
+    /// a reworded message is an observable behavior change — not a cosmetic
+    /// one. The non-rendering half (`description` == `caseDescription`, never
+    /// the principal array) is pinned by `TeleportHostLoginTests`.
+    @MainActor
+    func testTeleportHostLoginFailure_textsAreFrozen() {
+        XCTAssertEqual(
+            TeleportHostLoginFailure.certificateUnreadable.errorDescription,
+            "The Teleport certificate could not be read. Sign in with Face ID to refresh it."
+        )
+        XCTAssertEqual(
+            TeleportHostLoginFailure.noPrincipals.errorDescription,
+            "The Teleport certificate carries no login for this host. Ask an administrator to grant a login for this host on the Teleport role, then sign in again."
+        )
+        XCTAssertEqual(
+            TeleportHostLoginFailure.ambiguousPrincipalSet(["deploy", "root"]).errorDescription,
+            "The Teleport certificate carries several logins (deploy, root). Re-run Teleport setup and pick the host login to use."
+        )
+    }
+
+    // MARK: - TeleportIssuedCertValidator
+
+    /// The `noPrincipals` text is the user-visible
+    /// "Certificate binding check failed: …" payload the coordinators put into
+    /// their failure states, so the wording is an observable contract.
+    @MainActor
+    func testIssuedCertValidator_noPrincipalsTextIsFrozen() {
+        XCTAssertEqual(
+            TeleportIssuedCertValidator.Failure.noPrincipals.errorDescription,
+            "issued cert carries no non-internal principals"
+        )
+    }
+
     // MARK: - Listener contract defaults
 
     /// The wait must outlive the server's 180 s approval window; the socket

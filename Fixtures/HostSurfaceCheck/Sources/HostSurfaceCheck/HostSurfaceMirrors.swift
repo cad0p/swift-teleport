@@ -9,9 +9,13 @@
 //  `Features/Teleport/UI/TeleportLiveCoordinators.swift`,
 //  `Core/Teleport/TeleportKeyRingStoring.swift`,
 //  `Core/Teleport/TeleportKeyRingCredentialStore.swift`,
-//  `Core/SSH/SSHClient.swift`'s host-key verification, and one iOS
-//  harness — so a missing public promotion or an access-level regression
-//  fails here instead of at Phase 2 integration time.
+//  `Core/SSH/SSHClient.swift`'s host-key verification, the host-login
+//  resolver + login-view setup picker (`HostHostLoginMirror`),
+//  `ServerManager` credential invalidation
+//  (`HostCredentialInvalidationMirror`), `Server`/`TeleportKeyRing+Reuse`
+//  (`HostCredentialReuseMirror`), and one iOS harness — so a missing public
+//  promotion or an access-level regression fails here instead of at Phase 2
+//  integration time.
 //
 //  This target lives in a *separate SwiftPM package* that path-depends on
 //  `swift-teleport`. That is load-bearing: `package` access is visible to
@@ -61,6 +65,15 @@ protocol HostTeleportKeyRingStoring: AnyObject, ObservableObject {
     func liveEd25519PrivateKey(for clusterId: UUID) -> Data?
     func storeEd25519PrivateKey(_ pemData: Data, for clusterId: UUID) throws
     func clear(for clusterId: UUID)
+
+    /// Whether this row's registration is a complete, live source for reuse by
+    /// a duplicate server (the host's add-server / row-tap entry point).
+    func isReusableRegistrationSource(for serverId: UUID, clusterName: String?) -> Bool
+
+    /// Copy the registration metadata + cluster TLS state from `sourceId` to
+    /// `targetId` without the cert/key.
+    @discardableResult
+    func seedRegistration(from sourceId: UUID, to targetId: UUID) -> Bool
 }
 
 extension TeleportKeyRing: HostTeleportKeyRingStoring {}
@@ -89,6 +102,17 @@ final class HostCredentialStoreAdapter: TeleportCredentialStore, @unchecked Send
 
     func liveCertPEM(for clusterId: UUID) async -> String? {
         await MainActor.run { keyRingProvider().liveCertPEM(for: clusterId) }
+    }
+
+    func liveCredentialSnapshot(for clusterId: UUID) async -> (certPEM: String, privateKeyPEM: Data)? {
+        await MainActor.run {
+            let keyRing = keyRingProvider()
+            guard let certPEM = keyRing.liveCertPEM(for: clusterId),
+                  let privateKeyPEM = keyRing.liveEd25519PrivateKey(for: clusterId) else {
+                return nil
+            }
+            return (certPEM, privateKeyPEM)
+        }
     }
 
     func liveEd25519PrivateKey(for clusterId: UUID) async -> Data? {
@@ -537,6 +561,158 @@ enum HostSSHClientMirror {
     }
 }
 
+// MARK: - Mirror: host `TeleportHostLogin` + `TeleportHostLoginFailure`
+
+/// The host's `SSHClient.resolveTeleportAuthMaterial` resolves the SSH
+/// username from the exact certificate it is about to send, the setup step
+/// uses the pure selection policy, and the host's
+/// `Server.normalizedTeleportHostLogin` delegates to the package normalizer in
+/// Phase 2. The failure enum is the payload of the host's
+/// `SSHError.teleportHostLoginUnresolvable`.
+@MainActor
+enum HostHostLoginMirror {
+    /// The committed fixture user certificate (`Tests/TeleportCoreTests/
+    /// Fixtures/OpenSSH/user-cert-ed25519.pub`); the host resolves the login
+    /// against the exact certificate it is about to send.
+    static let fixtureCertPEM = "ssh-ed25519-cert-v01@openssh.com AAAAIHNzaC1lZDI1NTE5LWNlcnQtdjAxQG9wZW5zc2guY29tAAAAIGjD6K4DquQ1HAQyeEcd+oYehmAjE1rjdx7KASjO/iBIAAAAIHQDxUCNiEHAfQCCSmpyKE+zPpgFaxA7CBi9SaE5uZnhAAAAAAAAAAAAAAABAAAAEXVzZXItY2VydC1lZDI1NTE5AAAACQAAAAVhbGljZQAAAABpVbkAAAAAAHwkXwAAAAAAAAAAggAAABVwZXJtaXQtWDExLWZvcndhcmRpbmcAAAAAAAAAF3Blcm1pdC1hZ2VudC1mb3J3YXJkaW5nAAAAAAAAABZwZXJtaXQtcG9ydC1mb3J3YXJkaW5nAAAAAAAAAApwZXJtaXQtcHR5AAAAAAAAAA5wZXJtaXQtdXNlci1yYwAAAAAAAAAAAAAAMwAAAAtzc2gtZWQyNTUxOQAAACA5Enhm8RTFZ41MdNv9APpEmFnywjKHWku2CQ7uJTzH0AAAAFMAAAALc3NoLWVkMjU1MTkAAABAggu4NThmQoXlxJuFC+l2b0p61xemMM/B5mzFKN6fBqWd/PBq1BMogVWf8dkjQ+nQ4irDfEQS0DcGY7L24H7fCQ== vvterm-test-userkey"
+
+    static func resolveAndSelect(storedLogin: String?) -> String? {
+        guard let cert = OpenSSHCertificate.parse(authorizedKeysOrPEM: fixtureCertPEM) else {
+            return nil
+        }
+
+        switch TeleportHostLogin.resolve(cert: cert, storedLogin: storedLogin) {
+        case .success(let login):
+            _ = login
+        case .failure(let failure):
+            // Logs and diagnostics render the case name only (`description`
+            // too); the user-facing message is `errorDescription`.
+            _ = failure.caseDescription
+            _ = failure.description
+            _ = failure.errorDescription
+            _ = String(describing: failure)
+            _ = TeleportHostLoginFailure.certificateUnreadable
+            _ = TeleportHostLoginFailure.noPrincipals
+            _ = TeleportHostLoginFailure.ambiguousPrincipalSet(["deploy", "root"])
+        }
+
+        let normalized = TeleportHostLogin.normalized(storedLogin)
+        return TeleportHostLogin.initialSelection(logins: ["deploy", "root"], stored: normalized)
+    }
+
+    /// The host's `SSHClient.resolveTeleportAuthMaterial` reads the cert +
+    /// private key as one pair through the `any TeleportCredentialStore` seam
+    /// (never two separate reads) before resolving the login against that
+    /// exact PEM.
+    static func snapshot(
+        _ store: any TeleportCredentialStore,
+        clusterId: UUID
+    ) async -> (certPEM: String, privateKeyPEM: Data)? {
+        await store.liveCredentialSnapshot(for: clusterId)
+    }
+}
+
+// MARK: - Mirror: host `ServerManager` credential invalidation
+
+/// The host's `ServerManager` holds a `TeleportCredentialInvalidating`,
+/// consults the pure clear rule on every identity edit / CloudKit merge / row
+/// delete, and clears the credential when it says so. Both pieces are public
+/// surface: the host cannot restate the rule.
+@MainActor
+enum HostCredentialInvalidationMirror {
+    static func invalidateIfNeeded(
+        invalidator: any TeleportCredentialInvalidating,
+        serverId: UUID,
+        oldHost: String,
+        newHost: String,
+        oldUsername: String,
+        newUsername: String
+    ) {
+        let shouldClear = TeleportCredentialInvalidationPolicy.shouldClearCredential(
+            oldHost: oldHost,
+            newHost: newHost,
+            oldUsername: oldUsername,
+            newUsername: newUsername,
+            hasCredential: invalidator.hasCredential(for: serverId),
+            certKeyID: invalidator.certKeyID(for: serverId)
+        )
+        if shouldClear {
+            invalidator.clearCredential(for: serverId)
+        }
+    }
+
+    static func invalidateKeyRingAndMock() {
+        let keyRing = HostCompositionMirror.makeKeyRing(logging: DefaultTeleportLogging())
+        invalidateIfNeeded(
+            invalidator: keyRing,
+            serverId: UUID(),
+            oldHost: "old.example.com",
+            newHost: "new.example.com",
+            oldUsername: "pier",
+            newUsername: "pier"
+        )
+        let mock = MockTeleportKeyRing()
+        invalidateIfNeeded(
+            invalidator: mock,
+            serverId: UUID(),
+            oldHost: "h",
+            newHost: "h",
+            oldUsername: "pier",
+            newUsername: "deploy"
+        )
+    }
+}
+
+// MARK: - Mirror: host credential reuse (`Server` row + keyring helpers)
+
+/// The host's `Server` conforms to the package row protocol in Phase 2; this
+/// struct mirrors the host's row shape so `TeleportCredentialReuse.match`
+/// compiles from outside the package.
+struct HostCredentialReuseRow: TeleportCredentialReuseRow {
+    let id: UUID
+    let displayName: String
+    let host: String
+    let username: String
+    let isFaceIDTeleport: Bool
+}
+
+/// The host's `TeleportKeyRing+Reuse.swift` orchestration (host-side until
+/// Phase 2) is mirrored here: the pure matcher plus the two keyring helpers.
+@MainActor
+enum HostCredentialReuseMirror {
+    static func seedReuseIfPossible(
+        keyRing: any HostTeleportKeyRingStoring,
+        newRow: HostCredentialReuseRow,
+        liveRows: [HostCredentialReuseRow]
+    ) -> String? {
+        let newClusterName = keyRing.clusterTLSState(for: newRow.id)?.clusterName
+        guard let source = TeleportCredentialReuse.match(
+            newRow: newRow,
+            liveRows: liveRows,
+            credentials: keyRing.credentials,
+            clusterName: { keyRing.clusterTLSState(for: $0)?.clusterName },
+            isReusable: { keyRing.isReusableRegistrationSource(for: $0, clusterName: newClusterName) }
+        ) else {
+            return nil
+        }
+        guard keyRing.seedRegistration(from: source.id, to: newRow.id) else { return nil }
+        return source.displayName
+    }
+
+    static func seedReuseOnKeyRingAndMock() {
+        let newRow = HostCredentialReuseRow(
+            id: UUID(),
+            displayName: "duplicate",
+            host: "teleport.example.com",
+            username: "pier",
+            isFaceIDTeleport: true
+        )
+        let keyRing = HostCompositionMirror.makeKeyRing(logging: DefaultTeleportLogging())
+        _ = seedReuseIfPossible(keyRing: keyRing, newRow: newRow, liveRows: [])
+        _ = seedReuseIfPossible(keyRing: MockTeleportKeyRing(), newRow: newRow, liveRows: [])
+    }
+}
+
 // MARK: - Mirror: the host `SSHClient` D6 channel seam + package error surface
 
 /// The host's `SessionMutex` (an `NSLock` wrapper, `@unchecked Sendable`)
@@ -678,11 +854,30 @@ enum HostHarnessMirror {
         let bootstrap = MockTeleportBootstrapCoordinator(scenario: .happyPath)
         _ = bootstrap.state
         _ = bootstrap.lastBootstrapResult
-        let login = MockTeleportLoginCoordinator(scenario: .happyPath(certTTL: 3600))
+        let login = MockTeleportLoginCoordinator(scenario: .happyPath(certTTL: 3600, logins: ["deploy"]))
         _ = login.state
         _ = login.lastCertValidUntil
         let registration = MockTeleportRegistrationCoordinator(scenario: .happyPath)
         _ = registration.state
         _ = registration.lastDeviceName
+    }
+
+    /// The host's login sheet switches over every `TeleportLoginState` case;
+    /// `.success` now carries the certificate's non-internal principals (the
+    /// setup picker's host-login choices).
+    static func loginStateShape() {
+        let state = TeleportLoginState.success(
+            certValidUntil: Date(),
+            logins: ["deploy", "root"]
+        )
+        switch state {
+        case .idle, .awaitingFaceID, .fetchingCert:
+            break
+        case .success(let certValidUntil, let logins):
+            _ = certValidUntil
+            _ = logins
+        case .failed(let error):
+            _ = error
+        }
     }
 }

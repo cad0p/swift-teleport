@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **359 tests** across two frameworks and three targets:
+`swift test` runs **409 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
-| `TeleportCoreTests` | Swift Testing | 6 | 116 |
-| `TeleportCoreTests` | XCTest | 6 | 75 |
+| `TeleportCoreTests` | Swift Testing | 7 | 136 |
+| `TeleportCoreTests` | XCTest | 6 | 77 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
-| `TeleportPackageTests` | Swift Testing | 5 | 37 |
-| `TeleportPackageTests` | XCTest | 13 | 124 |
-| **Total** | | | **359** |
+| `TeleportPackageTests` | Swift Testing | 9 | 63 |
+| `TeleportPackageTests` | XCTest | 13 | 126 |
+| **Total** | | | **409** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -27,9 +27,12 @@
 | `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) (13) |
 | `SSHTLSTransportPumpFDCloserTests` | XCTest | pump-fd single ownership (fd reuse, source tripwire, `SO_NOSIGPIPE`) (3) |
 | `TeleportTLSTrustTests` | Swift Testing | `TeleportTLSTrust` (chain/name/EKU/ALPN + DER fail-closed matrix) |
-| `TeleportIssuedCertValidatorTests` | Swift Testing | issued-cert binding checks (11) |
-| `TeleportCertBindingCoordinatorTests` | Swift Testing | the coordinators store nothing on a cert/key mismatch (10) |
+| `TeleportHostLoginTests` | Swift Testing | `TeleportHostLogin` resolver + normalization + failure redaction (20) |
+| `TeleportIssuedCertValidatorTests` | Swift Testing | issued-cert binding checks (12) |
+| `TeleportCertBindingCoordinatorTests` | Swift Testing | the coordinators store nothing on a cert/key mismatch; keyID binding (12) |
 | `TeleportWebAuthnRPIDTests` | Swift Testing | rpID resolution through the login coordinator (8) |
+| `TeleportCredentialReuseMatcherTests` | Swift Testing | the generalized duplicate-row reuse matcher (9) |
+| `TeleportCredentialInvalidationPolicyTests` | Swift Testing | the pure credential clear rule (6) |
 | `FixtureTests` | XCTest | the 8 committed Go SEP fixtures, byte-compared (8) |
 | `BrowserMFAListenerLoopbackTests` | XCTest | the loopback HTTP contract (27) |
 | `BrowserMFACeremonyLoopbackURLTests` | XCTest | real non-zero-port loopback URL + teardown (3) |
@@ -38,7 +41,7 @@
 | `HeadlessLoginWireTests` | XCTest | `HeadlessLogin.post` (URL/200-only/error mapping) + coordinator failure paths (16) |
 | `TeleportLoginWireTests` | XCTest | `LoginFinishReq` v16/v17 field compat (1) |
 | `SEPSignerAlgorithmTests` | XCTest | signer algorithm/label contract + nested SEP key attributes (2) |
-| `TeleportFrozenTextTests` | XCTest | frozen error texts + listener defaults wiring + OSStatus signer classification (14) |
+| `TeleportFrozenTextTests` | XCTest | frozen error texts + listener defaults wiring + OSStatus signer classification (16) |
 | `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime + listener rejection reasons) (16) |
 | `TeleportBootstrapCoordinatorTimeoutTests` | XCTest | timeout classification + wrapped-cancel asymmetry (10) |
 | `TeleportBootstrapCoordinatorGenerationTests` | XCTest | stale-continuation request-generation guards (7) |
@@ -48,7 +51,9 @@
 
 | Suite | Framework | Subject |
 | --- | --- | --- |
-| `TeleportKeyRingTests` | Swift Testing | keyring persistence through an injected `UserDefaults`; readiness; additions-only Host CA refresh (5) |
+| `TeleportKeyRingTests` | Swift Testing | keyring persistence through an injected `UserDefaults`; readiness; additions-only Host CA refresh; certExpiry parse (6) |
+| `TeleportKeyRingReuseTests` | Swift Testing | the real keyring's reuse helpers (completeness, seeding) + the mock's key/cert non-copy (5) |
+| `TeleportKeyRingInvalidationConformanceTests` | Swift Testing | `TeleportCredentialInvalidating` on the real keyring (2) |
 | `TeleportCoordinatorSmokeTests` | Swift Testing | the three real coordinators against `TeleportTesting` mocks (3) |
 | `PublicSeamSmokeTests` | Swift Testing | the non-`@testable` v0.1.0 seam (7) |
 
@@ -70,7 +75,12 @@ Their subjects are host adapters/UI and run against the package in Phase 2:
 `TeleportBootstrapViewWiringTests`, `TeleportErrorMappingTests`,
 `TeleportServerIntegrationTests` (e2e), `AuthMethodTests`,
 `TeleportServerModelTests`, `TeleportValidityCopyTests`, and the UI-test
-suites.
+suites. The #262 additions stay host-side for the same reason:
+`ServerManagerTeleportHostLoginTests`, the host's `TeleportHostLoginTests`
+(minus the resolver matrix, which moved here), `TeleportCredentialReuseTests`
+(the `Server` half), `TeleportCredentialInvalidationTests` (the
+`ServerManager` wiring half), `TeleportBootstrapViewWiringTests`, and
+`SSHErrorDiagnosticsTests`.
 
 ## Reworked during the port
 

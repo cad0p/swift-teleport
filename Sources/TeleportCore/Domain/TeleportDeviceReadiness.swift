@@ -45,8 +45,9 @@ package struct TeleportDeviceReadinessResolver {
     /// Returns the live cert's ValidBefore, or nil if no cert.
     package typealias CertExpiry = (UUID) -> Date?
     /// Returns true if Host CA checking keys are persisted for this cluster.
-    /// Missing keys on an otherwise-registered device route to `.needsLogin`
-    /// (the login response refreshes them) — legacy installs never capture
+    /// Missing keys fail closed in two cases: a device with a cert routes to
+    /// `.needsLogin` (the login response refreshes them), and a device
+    /// without routes to `.needsBootstrap`. Legacy installs never capture
     /// checking keys until their next login.
     package typealias HasHostCAKeys = (UUID) -> Bool
 
@@ -59,7 +60,7 @@ package struct TeleportDeviceReadinessResolver {
         hasBootstrapCert: @escaping HasBootstrapCert,
         hasSEPKey: @escaping HasSEPKey,
         certExpiry: @escaping CertExpiry,
-        hasHostCAKeys: @escaping HasHostCAKeys = { _ in true }
+        hasHostCAKeys: @escaping HasHostCAKeys = { _ in false }
     ) {
         self.hasBootstrapCert = hasBootstrapCert
         self.hasSEPKey = hasSEPKey
@@ -68,10 +69,25 @@ package struct TeleportDeviceReadinessResolver {
     }
 
     package func resolve(clusterId: UUID, now: Date = Date()) -> TeleportDeviceReadiness {
-        guard hasBootstrapCert(clusterId) else { return .needsBootstrap }
-        guard hasSEPKey(clusterId) else { return .needsRegistration }
-        guard hasHostCAKeys(clusterId) else { return .needsLogin }
-        guard let expiry = certExpiry(clusterId), expiry > now else {
+        let hasCert = hasBootstrapCert(clusterId)
+
+        // No registered SEP key: a cert (Phase 1) means registration is the
+        // next step; nothing at all means bootstrap.
+        guard hasSEPKey(clusterId) else {
+            return hasCert ? .needsRegistration : .needsBootstrap
+        }
+
+        // A registered device without Host CA checking keys is a legacy
+        // install (the login response refreshes the pinned keys) — or a device
+        // state the caller cannot prove complete. Fail closed: without pinned
+        // anchors the SSH path cannot verify the proxy at all.
+        guard hasHostCAKeys(clusterId) else {
+            return hasCert ? .needsLogin : .needsBootstrap
+        }
+
+        // A key + pinned anchors with no (valid) cert is the reuse state: the
+        // registration is complete, only Face ID login + the picker remain.
+        guard hasCert, let expiry = certExpiry(clusterId), expiry > now else {
             return .needsLogin
         }
         return .ready

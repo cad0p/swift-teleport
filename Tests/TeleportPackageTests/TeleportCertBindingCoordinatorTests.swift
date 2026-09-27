@@ -48,8 +48,15 @@ struct TeleportCertBindingCoordinatorTests {
     }
 
     private func makeCluster() -> TeleportCluster {
-        TeleportCluster(host: "teleport.pcad.it", username: "pier")
+        // The fixture user cert's keyID is `user-cert-ed25519`; the coordinator
+        // requires the issued cert's keyID to equal the configured Teleport
+        // user, so success-path fixtures use the cert's own keyID.
+        TeleportCluster(host: "teleport.pcad.it", username: Self.fixtureCertKeyID)
     }
+
+    /// The keyID of the committed fixture user certificate
+    /// (`Fixtures/OpenSSH/user-cert-ed25519.pub`).
+    private static let fixtureCertKeyID = "user-cert-ed25519"
 
     private func makeRegisteredKeyRing(clusterId: UUID, credentialID: Data = Data([1, 2, 3, 4])) -> MockTeleportKeyRing {
         let keyRing = MockTeleportKeyRing()
@@ -198,7 +205,12 @@ struct TeleportCertBindingCoordinatorTests {
         )
         await coordinator.begin(cluster: cluster)
 
-        #expect(coordinator.state == .success(certValidUntil: Date(timeIntervalSince1970: 2_082_758_400)))
+        #expect(
+            coordinator.state == .success(
+                certValidUntil: Date(timeIntervalSince1970: 2_082_758_400),
+                logins: ["alice"]
+            )
+        )
         #expect(keyRing.liveCertPEM(for: cluster.id) == TeleportFixtureSupport.fixedIssuedUserCert)
         #expect(keyRing.liveEd25519PrivateKey(for: cluster.id) != nil)
     }
@@ -228,6 +240,41 @@ struct TeleportCertBindingCoordinatorTests {
         }
         #expect(keyRing.liveCertPEM(for: cluster.id) == nil)
         #expect(keyRing.liveEd25519PrivateKey(for: cluster.id) == nil)
+    }
+
+    @Test
+    func loginRejectsCertWhoseKeyIDDoesNotMatchTheTeleportUser() async throws {
+        // The cert is bound to the generated keypair (so the binding checks
+        // pass) but belongs to another Teleport user: it must never be stored,
+        // and the row's credential must be invalidated.
+        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "pier")
+        let credentialID = Data([1, 2, 3, 4])
+        let keyRing = makeRegisteredKeyRing(clusterId: cluster.id, credentialID: credentialID)
+        let http = MockTeleportHTTPClient()
+        http.scriptedLoginBeginResponse = MockTeleportHTTPClient.makeFixtureLoginBeginResponse()
+        http.scriptedLoginFinishResponse = TeleportFixtureSupport.makeFixtureLoginFinishResponse()
+
+        let coordinator = try makeLoginCoordinator(
+            http: http,
+            keyRing: keyRing,
+            credentialID: credentialID,
+            publicKey: TeleportFixtureSupport.fixedSSHPublicKey,
+            now: { TeleportFixtureSupport.fixtureClock }
+        )
+        await coordinator.begin(cluster: cluster)
+
+        #expect(
+            coordinator.state == .failed(.server(
+                "Certificate user binding check failed: the certificate does not belong to this Teleport user"
+            )),
+            "the failure must carry the binding-check message, got \(coordinator.state)"
+        )
+        #expect(keyRing.liveCertPEM(for: cluster.id) == nil)
+        #expect(keyRing.liveEd25519PrivateKey(for: cluster.id) == nil)
+        #expect(
+            keyRing.credentials[cluster.id] == nil,
+            "the mismatched credential must be invalidated so readiness flips to re-setup"
+        )
     }
 
     @Test
@@ -368,6 +415,33 @@ struct TeleportCertBindingCoordinatorTests {
         } else {
             Issue.record("expected .failed, got \(coordinator.state)")
         }
+        #expect(keyRing.liveCertPEM(for: cluster.id) == nil)
+        #expect(keyRing.clusterTLSState(for: cluster.id) == nil)
+        #expect(coordinator.lastBootstrapResult == nil)
+    }
+
+    @Test
+    func bootstrapAbortsWhenIssuedCertKeyIDDoesNotMatchTheTeleportUser() async throws {
+        // The bootstrap cert must belong to the configured Teleport user; a
+        // mismatch clears whatever the row holds and fails.
+        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "pier")
+        let keyRing = MockTeleportKeyRing()
+        let http = MockTeleportHTTPClient()
+        http.scriptedHeadlessResponse = TeleportFixtureSupport.makeFixtureSuccessResponse()
+
+        let coordinator = try makeBootstrapCoordinator(
+            http: http,
+            keyRing: keyRing,
+            publicKey: TeleportFixtureSupport.fixedSSHPublicKey
+        )
+        await coordinator.begin(cluster: cluster)
+
+        #expect(
+            coordinator.state == .failed(.unknown(
+                "Certificate user binding check failed: the certificate does not belong to this Teleport user"
+            )),
+            "the failure must carry the binding-check message, got \(coordinator.state)"
+        )
         #expect(keyRing.liveCertPEM(for: cluster.id) == nil)
         #expect(keyRing.clusterTLSState(for: cluster.id) == nil)
         #expect(coordinator.lastBootstrapResult == nil)

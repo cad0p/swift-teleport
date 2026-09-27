@@ -14,13 +14,14 @@ app supply its own keychain, logging, credential store, and in-app browser.
 
 ## Status
 
-`v0.2.0` is the **full client product set** (D5): `TeleportCore`,
-`TeleportAuth`, and `TeleportTesting`. It ships the gRPC/protobuf transport
-(SwiftNIO + SwiftProtobuf), the WebAuthn/SEP machinery with the byte-exact
-Go-generated fixture oracle, the three coordinators, the keyring, and the
-UI-free mocks. See [`docs/PROVENANCE.md`](docs/PROVENANCE.md) for exactly what
-is in and out, and [`docs/INTEGRATION.md`](docs/INTEGRATION.md) for the
-Phase-2 adoption path.
+`v0.2.1` is the current release of the **full client product set** (D5):
+`TeleportCore`, `TeleportAuth`, and `TeleportTesting`. It ships the
+gRPC/protobuf transport (SwiftNIO + SwiftProtobuf), the WebAuthn/SEP machinery
+with the byte-exact Go-generated fixture oracle, the three coordinators, the
+keyring, and the UI-free mocks. The next release adds the host-login
+(SSH username) resolver. See
+[`docs/PROVENANCE.md`](docs/PROVENANCE.md) for exactly what is in and out, and
+[`docs/INTEGRATION.md`](docs/INTEGRATION.md) for the Phase-2 adoption path.
 
 Requires **Swift 6.2 / Xcode 26** and targets **iOS 16.1+ / macOS 13.3+**
 (arm64). See [`docs/SPEC.md`](docs/SPEC.md).
@@ -41,8 +42,8 @@ This package is **MIT** ([`LICENSE`](LICENSE)).
 
 The host project (`cad0p/vvterm`) is a mixed-license repository: its
 remaining Teleport-derived files stay **AGPL-3.0-or-later** and are
-**carved out host-side — they are not in this package**. `v0.2.0` ships no
-AGPL text. The boundary is enforced in CI and documented in
+**carved out host-side — they are not in this package**. The released package
+ships no AGPL text. The boundary is enforced in CI and documented in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
 
 ## Development

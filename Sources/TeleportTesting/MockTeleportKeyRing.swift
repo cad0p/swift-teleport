@@ -32,6 +32,7 @@
 import Combine
 import Foundation
 import TeleportCore
+import TeleportAuth
 
 /// A mock Teleport key ring that scripts per-cluster credential state for
 /// UI tests. Used by `TeleportUITestHarness` to drive the 5-row readiness
@@ -187,6 +188,14 @@ public final class MockTeleportKeyRing: ObservableObject, TeleportCredentialStor
         return cred.sshCertPEM
     }
 
+    public func liveCredentialSnapshot(for clusterId: UUID) -> (certPEM: String, privateKeyPEM: Data)? {
+        guard let certPEM = liveCertPEM(for: clusterId),
+              let privateKeyPEM = liveEd25519PrivateKey(for: clusterId) else {
+            return nil
+        }
+        return (certPEM, privateKeyPEM)
+    }
+
     public func registeredCredentialID(for clusterId: UUID) -> Data? {
         guard let cred = credentials[clusterId],
               !cred.credentialID.isEmpty,
@@ -256,5 +265,66 @@ public final class MockTeleportKeyRing: ObservableObject, TeleportCredentialStor
         fixtures.removeValue(forKey: clusterId)
         ed25519PrivateKeys.removeValue(forKey: clusterId)
         clusterTLSStates.removeValue(forKey: clusterId)
+    }
+
+    // MARK: - Credential reuse (duplicate server rows)
+
+    public func isReusableRegistrationSource(for serverId: UUID, clusterName: String?) -> Bool {
+        guard let credential = credentials[serverId], !credential.credentialID.isEmpty else {
+            return false
+        }
+        guard fixtures[serverId]?.hasSEPKey == true else { return false }
+        guard let state = clusterTLSStates[serverId], !state.hostCACheckingKeys.isEmpty else {
+            return false
+        }
+        if let clusterName, !clusterName.isEmpty, state.clusterName != clusterName {
+            return false
+        }
+        return true
+    }
+
+    @discardableResult
+    public func seedRegistration(from sourceId: UUID, to targetId: UUID) -> Bool {
+        guard sourceId != targetId else { return false }
+        guard let source = credentials[sourceId], !source.credentialID.isEmpty else { return false }
+        guard let sourceTLSState = clusterTLSStates[sourceId], !sourceTLSState.hostCACheckingKeys.isEmpty else {
+            return false
+        }
+
+        let seeded = TeleportCredential(
+            clusterId: targetId,
+            credentialID: source.credentialID,
+            userHandle: source.userHandle,
+            publicKeyRaw: source.publicKeyRaw,
+            deviceName: source.deviceName
+        )
+        credentials[targetId] = seeded
+        clusterTLSStates[targetId] = sourceTLSState
+        fixtures[targetId] = Fixture(
+            hasBootstrapCert: false,
+            hasSEPKey: true,
+            certValidBefore: nil,
+            credentialID: Data(base64URLEncoded: source.credentialID) ?? Data(),
+            userHandle: Data(base64URLEncoded: source.userHandle) ?? Data(),
+            deviceName: source.deviceName
+        )
+        return true
+    }
+}
+
+// MARK: - Credential invalidation seam
+
+extension MockTeleportKeyRing: TeleportCredentialInvalidating {
+    public func hasCredential(for serverId: UUID) -> Bool {
+        credentials[serverId] != nil
+    }
+
+    public func certKeyID(for serverId: UUID) -> String? {
+        guard let certPEM = credentials[serverId]?.sshCertPEM else { return nil }
+        return OpenSSHCertificate.parse(authorizedKeysOrPEM: certPEM)?.keyID
+    }
+
+    public func clearCredential(for serverId: UUID) {
+        clear(for: serverId)
     }
 }

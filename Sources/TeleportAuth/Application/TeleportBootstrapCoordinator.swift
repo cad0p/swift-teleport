@@ -472,6 +472,19 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
             now: now()
         ) {
         case .success(let cert):
+            // The certificate must belong to the Teleport user this row is
+            // configured with (the cert's keyID is the Teleport identity).
+            // Clear whatever the row holds and fail closed on a mismatch.
+            guard cert.keyID == cluster.username else {
+                // No username in the log: identity values use the default
+                // (private) interpolation and never `.public`.
+                logger.error(
+                    "issued bootstrap certificate keyID does not match the configured Teleport user for cluster \(cluster.id.uuidString, privacy: .public) — rejecting and clearing the credential"
+                )
+                await keyRing.clear(for: cluster.id)
+                state = .failed(.unknown("Certificate user binding check failed: the certificate does not belong to this Teleport user"))
+                return
+            }
             certValidBefore = cert.validBeforeDate
         case .failure(let failure):
             logger.error(

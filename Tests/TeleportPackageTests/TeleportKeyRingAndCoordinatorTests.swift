@@ -61,7 +61,7 @@ struct TeleportKeyRingTests {
         let (keyRing, _, signer) = makeIsolatedKeyRing()
         let clusterId = UUID()
         keyRing.storeBootstrapCert(
-            "cert-pem",
+            TeleportFixtureSupport.fixedIssuedUserCert,
             validBefore: Date().addingTimeInterval(3600),
             for: clusterId
         )
@@ -112,6 +112,57 @@ struct TeleportKeyRingTests {
         #expect(keyRing.liveCertPEM(for: clusterId) == nil)
         #expect(keyRing.clusterTLSState(for: clusterId) == nil)
         #expect(keyRing.readiness(for: clusterId) == .needsBootstrap)
+    }
+
+    /// The `certExpiry` readiness probe parses the stored PEM and requires the
+    /// certificate to be inside its validity window: a stored
+    /// `certValidBefore` alone is not enough, and a PEM that cannot be read
+    /// must never resolve `.ready` (parity with the host's #262 change).
+    @Test
+    func certExpiryParsesTheLivePEMAndRequiresValidity() throws {
+        let (keyRing, _, signer) = makeIsolatedKeyRing()
+        let clusterId = UUID()
+        _ = try signer.createKey(credentialID: Data([1, 2, 3]))
+        keyRing.storeRegisteredSEPKey(
+            credentialID: Data([1, 2, 3]),
+            userHandle: Data("handle".utf8),
+            publicKeyRaw: Data([9]),
+            deviceName: "dev",
+            for: clusterId
+        )
+        keyRing.storeClusterTLSState(
+            TeleportClusterTLSState(
+                clusterName: "cluster",
+                clusterCAPEMs: ["ca"],
+                hostCACheckingKeys: [TeleportFixtureSupport.fixedSSHPublicKey]
+            ),
+            for: clusterId
+        )
+
+        // A cert that parses and is currently valid → `.ready`.
+        keyRing.storeBootstrapCert(
+            TeleportFixtureSupport.fixedIssuedUserCert,
+            validBefore: Date(timeIntervalSince1970: 2_082_758_400),
+            for: clusterId
+        )
+        #expect(keyRing.readiness(for: clusterId) == .ready)
+
+        // A parseable but expired PEM with a still-future stored expiry: the
+        // parse wins, so readiness must not stay `.ready`.
+        keyRing.storeBootstrapCert(
+            TeleportFixtureSupport.expiredHostCertLine,
+            validBefore: Date().addingTimeInterval(3600),
+            for: clusterId
+        )
+        #expect(keyRing.readiness(for: clusterId) == .needsLogin)
+
+        // An unparseable PEM with a future stored expiry → nil expiry → login.
+        keyRing.storeBootstrapCert(
+            "cert-pem",
+            validBefore: Date().addingTimeInterval(3600),
+            for: clusterId
+        )
+        #expect(keyRing.readiness(for: clusterId) == .needsLogin)
     }
 
     @Test
@@ -174,7 +225,7 @@ struct TeleportCoordinatorSmokeTests {
             tlsKeyPairGenerator: try! TeleportFixtureSupport.makeFixedTLSGenerator(),
             now: { TeleportFixtureSupport.fixtureClock }
         )
-        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "pier")
+        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "user-cert-ed25519")
 
         await coordinator.begin(cluster: cluster)
 
@@ -187,7 +238,7 @@ struct TeleportCoordinatorSmokeTests {
     @Test
     func loginCoordinatorIssuesAndStoresACert() async {
         let keyRing = MockTeleportKeyRing()
-        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "pier")
+        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "user-cert-ed25519")
         keyRing.seed(
             clusterId: cluster.id,
             fixture: MockTeleportKeyRing.Fixture(
@@ -216,11 +267,14 @@ struct TeleportCoordinatorSmokeTests {
 
         await coordinator.begin(cluster: cluster)
 
-        guard case .success(let validUntil) = coordinator.state else {
+        guard case .success(let validUntil, let logins) = coordinator.state else {
             Issue.record("expected .success, got \(coordinator.state)")
             return
         }
         #expect(validUntil > TeleportFixtureSupport.fixtureClock)
+        // The fixture user cert's single non-internal principal travels to the
+        // setup picker.
+        #expect(logins == ["alice"])
         #expect(http.loginFinishCallCount == 1)
         #expect(keyRing.liveCertPEM(for: cluster.id) != nil)
     }
