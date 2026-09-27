@@ -207,6 +207,10 @@ private final class GatedTeleportCredentialStore: TeleportCredentialStore {
         underlying.liveCertPEM(for: clusterId)
     }
 
+    func liveCredentialSnapshot(for clusterId: UUID) async -> (certPEM: String, privateKeyPEM: Data)? {
+        await underlying.liveCredentialSnapshot(for: clusterId)
+    }
+
     func liveEd25519PrivateKey(for clusterId: UUID) async -> Data? {
         underlying.liveEd25519PrivateKey(for: clusterId)
     }

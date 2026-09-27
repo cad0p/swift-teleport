@@ -187,6 +187,14 @@ public final class MockTeleportKeyRing: ObservableObject, TeleportCredentialStor
         return cred.sshCertPEM
     }
 
+    public func liveCredentialSnapshot(for clusterId: UUID) -> (certPEM: String, privateKeyPEM: Data)? {
+        guard let certPEM = liveCertPEM(for: clusterId),
+              let privateKeyPEM = liveEd25519PrivateKey(for: clusterId) else {
+            return nil
+        }
+        return (certPEM, privateKeyPEM)
+    }
+
     public func registeredCredentialID(for clusterId: UUID) -> Data? {
         guard let cred = credentials[clusterId],
               !cred.credentialID.isEmpty,

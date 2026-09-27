@@ -127,11 +127,18 @@ public final class TeleportKeyRing: ObservableObject, TeleportCredentialStore {
                 }
             },
             certExpiry: { [weak self] id in
-                guard let cred = self?.credentials[id] else { return nil }
-                // `.distantPast` is the "no cert" sentinel in TeleportCredential;
-                // map it back to nil so the resolver treats it as "no expiry".
-                if cred.certValidBefore == .distantPast { return nil }
-                return cred.certValidBefore
+                guard let cred = self?.credentials[id],
+                      let certPEM = cred.sshCertPEM,
+                      let cert = OpenSSHCertificate.parse(authorizedKeysOrPEM: certPEM),
+                      cert.isValid(at: Date()) else {
+                    // `.distantPast` is the "no cert" sentinel in
+                    // TeleportCredential; map it back to nil so the resolver
+                    // treats it as "no expiry". A PEM that does not parse (or
+                    // is outside its validity window) also returns nil: a cert
+                    // that cannot be read must never resolve `.ready`.
+                    return nil
+                }
+                return cert.validBeforeDate
             },
             hasHostCAKeys: { [weak self] id in
                 // Legacy installs (pre-checking-keys) have TLS state without
@@ -200,6 +207,20 @@ public final class TeleportKeyRing: ObservableObject, TeleportCredentialStore {
     public func liveCertPEM(for clusterId: UUID) -> String? {
         guard let cred = credentials[clusterId], cred.isCertValid else { return nil }
         return cred.sshCertPEM
+    }
+
+    /// One consistent read of the live cert + its paired private key. Both
+    /// reads happen in this synchronous MainActor body, so a concurrent
+    /// re-login cannot interleave between them. (The *writes* still store the
+    /// cert and the key in two calls, so a reader could observe a new cert
+    /// with the old key if it ran between them — fail-closed at the server and
+    /// the connect-time keyID binding gate the username.)
+    public func liveCredentialSnapshot(for clusterId: UUID) -> (certPEM: String, privateKeyPEM: Data)? {
+        guard let certPEM = liveCertPEM(for: clusterId),
+              let privateKeyPEM = liveEd25519PrivateKey(for: clusterId) else {
+            return nil
+        }
+        return (certPEM, privateKeyPEM)
     }
 
     public func registeredCredentialID(for clusterId: UUID) -> Data? {

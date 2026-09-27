@@ -51,6 +51,13 @@ enum TeleportFixtureSupport {
         fixtureString("OpenSSH/host-cert-ed25519.pub")
     }
 
+    /// The expired fixture host certificate (valid 2020-01-01 → 2021-01-01):
+    /// pins that a parseable but out-of-window PEM is rejected even when the
+    /// stored `certValidBefore` is in the future.
+    static var expiredHostCertLine: String {
+        fixtureString("OpenSSH/host-cert-expired.pub")
+    }
+
     /// Resolves a fixture under the canonical Core test tree
     /// (`Tests/TeleportCoreTests/Fixtures/`).
     static func fixtureURL(_ relativePath: String) -> URL {

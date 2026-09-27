@@ -61,7 +61,7 @@ struct TeleportKeyRingTests {
         let (keyRing, _, signer) = makeIsolatedKeyRing()
         let clusterId = UUID()
         keyRing.storeBootstrapCert(
-            "cert-pem",
+            TeleportFixtureSupport.fixedIssuedUserCert,
             validBefore: Date().addingTimeInterval(3600),
             for: clusterId
         )
@@ -112,6 +112,57 @@ struct TeleportKeyRingTests {
         #expect(keyRing.liveCertPEM(for: clusterId) == nil)
         #expect(keyRing.clusterTLSState(for: clusterId) == nil)
         #expect(keyRing.readiness(for: clusterId) == .needsBootstrap)
+    }
+
+    /// The `certExpiry` readiness probe parses the stored PEM and requires the
+    /// certificate to be inside its validity window: a stored
+    /// `certValidBefore` alone is not enough, and a PEM that cannot be read
+    /// must never resolve `.ready` (parity with the host's #262 change).
+    @Test
+    func certExpiryParsesTheLivePEMAndRequiresValidity() throws {
+        let (keyRing, _, signer) = makeIsolatedKeyRing()
+        let clusterId = UUID()
+        _ = try signer.createKey(credentialID: Data([1, 2, 3]))
+        keyRing.storeRegisteredSEPKey(
+            credentialID: Data([1, 2, 3]),
+            userHandle: Data("handle".utf8),
+            publicKeyRaw: Data([9]),
+            deviceName: "dev",
+            for: clusterId
+        )
+        keyRing.storeClusterTLSState(
+            TeleportClusterTLSState(
+                clusterName: "cluster",
+                clusterCAPEMs: ["ca"],
+                hostCACheckingKeys: [TeleportFixtureSupport.fixedSSHPublicKey]
+            ),
+            for: clusterId
+        )
+
+        // A cert that parses and is currently valid → `.ready`.
+        keyRing.storeBootstrapCert(
+            TeleportFixtureSupport.fixedIssuedUserCert,
+            validBefore: Date(timeIntervalSince1970: 2_082_758_400),
+            for: clusterId
+        )
+        #expect(keyRing.readiness(for: clusterId) == .ready)
+
+        // A parseable but expired PEM with a still-future stored expiry: the
+        // parse wins, so readiness must not stay `.ready`.
+        keyRing.storeBootstrapCert(
+            TeleportFixtureSupport.expiredHostCertLine,
+            validBefore: Date().addingTimeInterval(3600),
+            for: clusterId
+        )
+        #expect(keyRing.readiness(for: clusterId) == .needsLogin)
+
+        // An unparseable PEM with a future stored expiry → nil expiry → login.
+        keyRing.storeBootstrapCert(
+            "cert-pem",
+            validBefore: Date().addingTimeInterval(3600),
+            for: clusterId
+        )
+        #expect(keyRing.readiness(for: clusterId) == .needsLogin)
     }
 
     @Test
