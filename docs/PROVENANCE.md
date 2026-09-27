@@ -78,10 +78,15 @@ The import preserves file content except for:
    Three XCTest cases pin the guard (fd-reuse via `dup2`, a source-level pin
    that no raw `Darwin.close(...pumpFD...)` reappears, and a SIGPIPE
    counterfactual).
+6. **Plain-literal error text** — the ported
+   `TeleportHostLoginFailure.errorDescription` drops the host's
+   `String(localized:)` wrappers for plain literals: the package ships no
+   localization catalog, and its boundary gate forbids `String(localized:)`
+   in package sources. The message text and its rendering are unchanged.
 
-Beyond the access-level/module/isolated-deinit adaptations above and the
-v0.2.1/v0.2.2 parity ports, the imported file content is unchanged from the
-host's post-`30ac5388` shapes.
+Beyond the access-level/module/isolated-deinit/plain-literal adaptations above
+and the v0.2.1/v0.2.2 parity ports, the imported file content is unchanged
+from the host's post-`30ac5388` shapes.
 
 ### v0.2.2 `Server`-free generalizations (deliberate)
 
