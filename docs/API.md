@@ -102,9 +102,11 @@ public enum TeleportDeviceReadiness { … }
 // sent; otherwise a single non-internal principal is derived; zero or several
 // principals fail closed with a named error. `normalized` is the host's
 // `Server.normalizedTeleportHostLogin` shape rule.
-public enum TeleportHostLoginFailure: Error, Equatable, LocalizedError, CustomStringConvertible {
+public enum TeleportHostLoginFailure: Error, Equatable, LocalizedError, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var caseDescription: String   // case name only (never the principals)
     public var description: String       // == caseDescription
+    public var debugDescription: String  // == caseDescription
+    public var customMirror: Mirror      // one "case" child; no principals
     public var errorDescription: String? // the user-facing text
 }
 public enum TeleportHostLogin {

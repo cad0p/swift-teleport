@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **409 tests** across two frameworks and three targets:
+`swift test` runs **411 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
-| `TeleportCoreTests` | Swift Testing | 7 | 136 |
+| `TeleportCoreTests` | Swift Testing | 7 | 137 |
 | `TeleportCoreTests` | XCTest | 6 | 77 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
 | `TeleportPackageTests` | Swift Testing | 9 | 63 |
-| `TeleportPackageTests` | XCTest | 13 | 126 |
-| **Total** | | | **409** |
+| `TeleportPackageTests` | XCTest | 13 | 127 |
+| **Total** | | | **411** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -27,7 +27,7 @@
 | `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) (13) |
 | `SSHTLSTransportPumpFDCloserTests` | XCTest | pump-fd single ownership (fd reuse, source tripwire, `SO_NOSIGPIPE`) (3) |
 | `TeleportTLSTrustTests` | Swift Testing | `TeleportTLSTrust` (chain/name/EKU/ALPN + DER fail-closed matrix) |
-| `TeleportHostLoginTests` | Swift Testing | `TeleportHostLogin` resolver + normalization + failure redaction (20) |
+| `TeleportHostLoginTests` | Swift Testing | `TeleportHostLogin` resolver + normalization + failure redaction (21) |
 | `TeleportIssuedCertValidatorTests` | Swift Testing | issued-cert binding checks (12) |
 | `TeleportCertBindingCoordinatorTests` | Swift Testing | the coordinators store nothing on a cert/key mismatch; keyID binding (12) |
 | `TeleportWebAuthnRPIDTests` | Swift Testing | rpID resolution through the login coordinator (8) |
@@ -42,7 +42,7 @@
 | `TeleportLoginWireTests` | XCTest | `LoginFinishReq` v16/v17 field compat (1) |
 | `SEPSignerAlgorithmTests` | XCTest | signer algorithm/label contract + nested SEP key attributes (2) |
 | `TeleportFrozenTextTests` | XCTest | frozen error texts + listener defaults wiring + OSStatus signer classification (16) |
-| `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime + listener rejection reasons) (16) |
+| `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime + listener rejection reasons) (17) |
 | `TeleportBootstrapCoordinatorTimeoutTests` | XCTest | timeout classification + wrapped-cancel asymmetry (10) |
 | `TeleportBootstrapCoordinatorGenerationTests` | XCTest | stale-continuation request-generation guards (7) |
 | `TeleportSynchronousReleaseTests` | XCTest | isolated-deinit synchronous release (1) |

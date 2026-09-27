@@ -586,10 +586,21 @@ enum HostHostLoginMirror {
             _ = login
         case .failure(let failure):
             // Logs and diagnostics render the case name only (`description`
-            // too); the user-facing message is `errorDescription`.
+            // and the reflection surface too); the user-facing message is
+            // `errorDescription`.
             _ = failure.caseDescription
             _ = failure.description
             _ = failure.errorDescription
+            _ = failure.debugDescription
+            // Name the `CustomReflectable` witness directly.
+            // `Mirror(reflecting:)` is a stdlib initializer that never
+            // references `customMirror`, so it compiles against a type with
+            // no conformance and would pin nothing. Note the demotion this
+            // guards against is rejected by the compiler itself (a public
+            // protocol requirement forces the witness to stay `public`), so
+            // this line is a defensive cross-package name pin, not the gate.
+            _ = failure.customMirror
+            let _: any CustomReflectable = failure
             _ = String(describing: failure)
             _ = TeleportHostLoginFailure.certificateUnreadable
             _ = TeleportHostLoginFailure.noPrincipals
