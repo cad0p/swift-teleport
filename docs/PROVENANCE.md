@@ -24,7 +24,7 @@ tree:
   `nonisolated` deinit markers, OSStatus signer classification), and
   `05764aa2` (GCM-gated browser-MFA callback, nested SEP private-key
   attributes). The parity inventory is below.
-- **v0.2.2** (the release follow-up to this port) carries `30ac5388` — the
+- **v0.3.0** carries `30ac5388` — the
   #262 host-login resolution: the SSH username must be a certificate
   principal, not the Teleport user. It ports the
   resolver, the validator's non-internal-principal guard, the
@@ -85,10 +85,10 @@ The import preserves file content except for:
    in package sources. The message text and its rendering are unchanged.
 
 Beyond the access-level/module/isolated-deinit/plain-literal adaptations above
-and the v0.2.1/v0.2.2 parity ports, the imported file content is unchanged
+and the v0.2.1/v0.3.0 parity ports, the imported file content is unchanged
 from the host's post-`30ac5388` shapes.
 
-### v0.2.2 `Server`-free generalizations (deliberate)
+### v0.3.0 `Server`-free generalizations (deliberate)
 
 The #262 host code named two host types; the package carries neither:
 
@@ -151,7 +151,7 @@ Host-only #262 files (not imported): `TeleportLoginView` (SwiftUI picker),
 | `Application/TeleportKeyRing.swift` | `VVTerm/Features/Teleport/Application/` |
 | `Infrastructure/TeleportHTTPClient.swift` | `VVTerm/Features/Teleport/Infrastructure/` |
 
-### v0.2.2 additions (3 files)
+### v0.3.0 additions (3 files)
 
 | Path | Origin |
 | --- | --- |
