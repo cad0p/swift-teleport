@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [calver-released]
+
+<!-- USER-EDITABLE SECTION START -->
+<!-- Add your curated release notes here. -->
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Log the bootstrap username privately and render the host-login failure payload-free (closes #22)
+
+### 📚 Documentation
+
+- Refresh the README status and PROVENANCE version labels for v0.3.0 (closes #25)
+
+
 ## [0.3.0] - 2026-09-27
 
 <!-- USER-EDITABLE SECTION START -->
