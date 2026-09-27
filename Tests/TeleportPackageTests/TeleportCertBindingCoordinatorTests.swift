@@ -263,11 +263,12 @@ struct TeleportCertBindingCoordinatorTests {
         )
         await coordinator.begin(cluster: cluster)
 
-        if case .failed = coordinator.state {
-            // expected
-        } else {
-            Issue.record("expected .failed, got \(coordinator.state)")
-        }
+        #expect(
+            coordinator.state == .failed(.server(
+                "Certificate user binding check failed: the certificate does not belong to this Teleport user"
+            )),
+            "the failure must carry the binding-check message, got \(coordinator.state)"
+        )
         #expect(keyRing.liveCertPEM(for: cluster.id) == nil)
         #expect(keyRing.liveEd25519PrivateKey(for: cluster.id) == nil)
         #expect(
@@ -435,11 +436,12 @@ struct TeleportCertBindingCoordinatorTests {
         )
         await coordinator.begin(cluster: cluster)
 
-        if case .failed = coordinator.state {
-            // expected
-        } else {
-            Issue.record("expected .failed, got \(coordinator.state)")
-        }
+        #expect(
+            coordinator.state == .failed(.unknown(
+                "Certificate user binding check failed: the certificate does not belong to this Teleport user"
+            )),
+            "the failure must carry the binding-check message, got \(coordinator.state)"
+        )
         #expect(keyRing.liveCertPEM(for: cluster.id) == nil)
         #expect(keyRing.clusterTLSState(for: cluster.id) == nil)
         #expect(coordinator.lastBootstrapResult == nil)
