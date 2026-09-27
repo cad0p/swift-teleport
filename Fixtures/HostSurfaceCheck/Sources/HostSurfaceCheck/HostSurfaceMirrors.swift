@@ -588,6 +588,57 @@ enum HostHostLoginMirror {
     }
 }
 
+// MARK: - Mirror: host `ServerManager` credential invalidation
+
+/// The host's `ServerManager` holds a `TeleportCredentialInvalidating`,
+/// consults the pure clear rule on every identity edit / CloudKit merge / row
+/// delete, and clears the credential when it says so. Both pieces are public
+/// surface: the host cannot restate the rule.
+@MainActor
+enum HostCredentialInvalidationMirror {
+    static func invalidateIfNeeded(
+        invalidator: any TeleportCredentialInvalidating,
+        serverId: UUID,
+        oldHost: String,
+        newHost: String,
+        oldUsername: String,
+        newUsername: String
+    ) {
+        let shouldClear = TeleportCredentialInvalidationPolicy.shouldClearCredential(
+            oldHost: oldHost,
+            newHost: newHost,
+            oldUsername: oldUsername,
+            newUsername: newUsername,
+            hasCredential: invalidator.hasCredential(for: serverId),
+            certKeyID: invalidator.certKeyID(for: serverId)
+        )
+        if shouldClear {
+            invalidator.clearCredential(for: serverId)
+        }
+    }
+
+    static func invalidateKeyRingAndMock() {
+        let keyRing = HostCompositionMirror.makeKeyRing(logging: DefaultTeleportLogging())
+        invalidateIfNeeded(
+            invalidator: keyRing,
+            serverId: UUID(),
+            oldHost: "old.example.com",
+            newHost: "new.example.com",
+            oldUsername: "pier",
+            newUsername: "pier"
+        )
+        let mock = MockTeleportKeyRing()
+        invalidateIfNeeded(
+            invalidator: mock,
+            serverId: UUID(),
+            oldHost: "h",
+            newHost: "h",
+            oldUsername: "pier",
+            newUsername: "deploy"
+        )
+    }
+}
+
 // MARK: - Mirror: the host `SSHClient` D6 channel seam + package error surface
 
 /// The host's `SessionMutex` (an `NSLock` wrapper, `@unchecked Sendable`)

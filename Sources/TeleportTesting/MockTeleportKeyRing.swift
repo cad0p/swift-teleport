@@ -32,6 +32,7 @@
 import Combine
 import Foundation
 import TeleportCore
+import TeleportAuth
 
 /// A mock Teleport key ring that scripts per-cluster credential state for
 /// UI tests. Used by `TeleportUITestHarness` to drive the 5-row readiness
@@ -264,5 +265,22 @@ public final class MockTeleportKeyRing: ObservableObject, TeleportCredentialStor
         fixtures.removeValue(forKey: clusterId)
         ed25519PrivateKeys.removeValue(forKey: clusterId)
         clusterTLSStates.removeValue(forKey: clusterId)
+    }
+}
+
+// MARK: - Credential invalidation seam
+
+extension MockTeleportKeyRing: TeleportCredentialInvalidating {
+    public func hasCredential(for serverId: UUID) -> Bool {
+        credentials[serverId] != nil
+    }
+
+    public func certKeyID(for serverId: UUID) -> String? {
+        guard let certPEM = credentials[serverId]?.sshCertPEM else { return nil }
+        return OpenSSHCertificate.parse(authorizedKeysOrPEM: certPEM)?.keyID
+    }
+
+    public func clearCredential(for serverId: UUID) {
+        clear(for: serverId)
     }
 }
