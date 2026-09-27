@@ -9,9 +9,13 @@
 //  `Features/Teleport/UI/TeleportLiveCoordinators.swift`,
 //  `Core/Teleport/TeleportKeyRingStoring.swift`,
 //  `Core/Teleport/TeleportKeyRingCredentialStore.swift`,
-//  `Core/SSH/SSHClient.swift`'s host-key verification, and one iOS
-//  harness — so a missing public promotion or an access-level regression
-//  fails here instead of at Phase 2 integration time.
+//  `Core/SSH/SSHClient.swift`'s host-key verification, the host-login
+//  resolver + login-view setup picker (`HostHostLoginMirror`),
+//  `ServerManager` credential invalidation
+//  (`HostCredentialInvalidationMirror`), `Server`/`TeleportKeyRing+Reuse`
+//  (`HostCredentialReuseMirror`), and one iOS harness — so a missing public
+//  promotion or an access-level regression fails here instead of at Phase 2
+//  integration time.
 //
 //  This target lives in a *separate SwiftPM package* that path-depends on
 //  `swift-teleport`. That is load-bearing: `package` access is visible to
@@ -594,6 +598,17 @@ enum HostHostLoginMirror {
 
         let normalized = TeleportHostLogin.normalized(storedLogin)
         return TeleportHostLogin.initialSelection(logins: ["deploy", "root"], stored: normalized)
+    }
+
+    /// The host's `SSHClient.resolveTeleportAuthMaterial` reads the cert +
+    /// private key as one pair through the `any TeleportCredentialStore` seam
+    /// (never two separate reads) before resolving the login against that
+    /// exact PEM.
+    static func snapshot(
+        _ store: any TeleportCredentialStore,
+        clusterId: UUID
+    ) async -> (certPEM: String, privateKeyPEM: Data)? {
+        await store.liveCredentialSnapshot(for: clusterId)
     }
 }
 

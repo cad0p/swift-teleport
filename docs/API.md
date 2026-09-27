@@ -264,9 +264,11 @@ helpers (`liveCredentialSnapshot`, `isReusableRegistrationSource`,
 `Fixtures/HostSurfaceCheck` is a **separate SwiftPM package** that
 path-depends on this one; its `HostSurfaceMirrors` compile the host's
 `TeleportComposition`, `TeleportLiveCoordinators`, `TeleportKeyRingStoring`,
-`TeleportKeyRingCredentialStore`, `SSHClient` host-key verification, and one
-iOS harness against the public surface only. A missing promotion fails that
-build instead of Phase 2.
+`TeleportKeyRingCredentialStore`, `SSHClient` host-key verification + host-login
+resolver, the login-view setup picker, `ServerManager` credential invalidation,
+the `Server`/`TeleportKeyRing+Reuse` reuse orchestration, and one iOS harness
+against the public surface only. A missing promotion fails that build instead
+of Phase 2.
 
 The in-package `Tests/TeleportCoreConsumerTests` target is a non-`@testable`
 public-seam smoke test (`PublicSeamSmokeTests`); it catches `public` →
