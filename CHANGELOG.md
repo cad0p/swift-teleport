@@ -2,6 +2,44 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-09-27
+
+<!-- USER-EDITABLE SECTION START -->
+Parity with the host's #262 host-login fix
+([`cad0p/vvterm#263`](https://github.com/cad0p/vvterm/pull/263), squash
+`30ac5388`), so Phase 2 can delete the host's Teleport copies and adopt the
+package as the source of truth.
+
+A Teleport SSH connection authenticates as the Teleport *user* (`pier`), but
+the username libssh2 sends must be a **certificate principal** — the host login
+(`deploy`); Teleport's `CertChecker` rejects a username that is not in the
+certificate's `ValidPrincipals`. `TeleportCore` gains the fail-closed
+host-login resolver (`TeleportHostLogin`), the credential-invalidation seam,
+the generalized credential-reuse matcher, and the certificate's principals on
+`TeleportLoginState.success`. `TeleportAuth` gains the keyID binding in both
+coordinators, the fail-closed readiness order, the `certExpiry` re-parse, the
+one-body `liveCredentialSnapshot` read, and the registration-reuse helpers.
+
+Also in this release:
+
+- the issued-cert validator rejects a certificate with no non-internal
+  principal, so a login can never reach `.success(logins: [])`;
+- the cross-package host-surface fixture mirrors the new public surface, and
+  now consumes `liveCredentialSnapshot` through the protocol so a requirement
+  removal fails the gate;
+- the boundary gate forbids `String(localized:)` in package sources.
+
+`0.x` minor: this release changes the payload of the public enum case
+`TeleportLoginState.success(certValidUntil:logins:)`, which is source-breaking.
+Per the package's `0.x` policy (D13), minors may break the API and patches
+never. See `docs/API.md` and `docs/INTEGRATION.md`.
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Port the #262 host-login resolution into the package (closes #20)
+
+
 ## [0.2.1] - 2026-09-26
 
 <!-- USER-EDITABLE SECTION START -->
