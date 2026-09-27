@@ -136,7 +136,7 @@ The connect path must send a certificate principal, not the Teleport user
 - bind `cert.keyID == cluster.username` at every issue site (the coordinators
   already do it; the host's connect path re-checks it).
 
-## What v0.2.0 provides
+## What the package provides
 
 The full D5 product set: the `TeleportCore` seam + transports + gRPC/protobuf
 + WebAuthn/SEP, the `TeleportAuth` coordinators + keyring + web-api client,

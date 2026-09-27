@@ -247,6 +247,6 @@ permitted by GPLv3 section 13.
 
 ## Phase 2 gate
 
-The host adopts `v0.2.0` by pinning `exactVersion` and restoring its
+The host adopts the package by pinning `exactVersion` and restoring its
 observation conformance (`extension TeleportKeyRing: TeleportKeyRingStoring`)
 + its live adapters at the composition root. Phase 2 is out of scope here.
