@@ -311,6 +311,60 @@ public final class TeleportKeyRing: ObservableObject, TeleportCredentialStore {
         logger.info("cleared credentials for cluster \(clusterId.uuidString, privacy: .public)")
     }
 
+    // MARK: - Credential reuse (duplicate server rows)
+
+    /// The completeness precondition for reuse: a credential record with a
+    /// non-empty credentialID, the SEP key still present in the Secure
+    /// Enclave, a cluster TLS state with non-empty Host CA checking keys (a
+    /// complete setup — legacy installs with 0 checking keys are not
+    /// offered), and a matching cluster name when one is supplied.
+    public func isReusableRegistrationSource(for serverId: UUID, clusterName: String?) -> Bool {
+        guard let credential = credentials[serverId], !credential.credentialID.isEmpty else {
+            return false
+        }
+        guard let credID = Data(base64URLEncoded: credential.credentialID),
+              (try? signer.loadKey(credentialID: credID)) != nil else {
+            return false
+        }
+        guard let state = clusterTLSState[serverId], !state.hostCACheckingKeys.isEmpty else {
+            return false
+        }
+        if let clusterName, !clusterName.isEmpty, state.clusterName != clusterName {
+            return false
+        }
+        return true
+    }
+
+    /// Seed the registration metadata (and cluster TLS state) for a duplicate
+    /// server row from a complete live registration, then return true. The cert
+    /// and the ed25519 private key are deliberately NOT copied: the new row
+    /// needs the Face ID login (and the host-login picker) to get its own
+    /// certificate.
+    @discardableResult
+    public func seedRegistration(from sourceId: UUID, to targetId: UUID) -> Bool {
+        guard sourceId != targetId else { return false }
+        guard let source = credentials[sourceId], !source.credentialID.isEmpty else { return false }
+        guard let sourceTLSState = clusterTLSState[sourceId], !sourceTLSState.hostCACheckingKeys.isEmpty else {
+            return false
+        }
+
+        let seeded = TeleportCredential(
+            clusterId: targetId,
+            credentialID: source.credentialID,
+            userHandle: source.userHandle,
+            publicKeyRaw: source.publicKeyRaw,
+            deviceName: source.deviceName
+        )
+        credentials[targetId] = seeded
+        clusterTLSState[targetId] = sourceTLSState
+        save()
+        saveClusterTLSState()
+        logger.info(
+            "seeded the device registration for cluster \(targetId.uuidString, privacy: .public) from \(sourceId.uuidString, privacy: .public)"
+        )
+        return true
+    }
+
     // MARK: - Cluster TLS state (SSH transport)
 
     /// The in-memory cache of cluster TLS state, loaded from UserDefaults.

@@ -266,6 +266,50 @@ public final class MockTeleportKeyRing: ObservableObject, TeleportCredentialStor
         ed25519PrivateKeys.removeValue(forKey: clusterId)
         clusterTLSStates.removeValue(forKey: clusterId)
     }
+
+    // MARK: - Credential reuse (duplicate server rows)
+
+    public func isReusableRegistrationSource(for serverId: UUID, clusterName: String?) -> Bool {
+        guard let credential = credentials[serverId], !credential.credentialID.isEmpty else {
+            return false
+        }
+        guard fixtures[serverId]?.hasSEPKey == true else { return false }
+        guard let state = clusterTLSStates[serverId], !state.hostCACheckingKeys.isEmpty else {
+            return false
+        }
+        if let clusterName, !clusterName.isEmpty, state.clusterName != clusterName {
+            return false
+        }
+        return true
+    }
+
+    @discardableResult
+    public func seedRegistration(from sourceId: UUID, to targetId: UUID) -> Bool {
+        guard sourceId != targetId else { return false }
+        guard let source = credentials[sourceId], !source.credentialID.isEmpty else { return false }
+        guard let sourceTLSState = clusterTLSStates[sourceId], !sourceTLSState.hostCACheckingKeys.isEmpty else {
+            return false
+        }
+
+        let seeded = TeleportCredential(
+            clusterId: targetId,
+            credentialID: source.credentialID,
+            userHandle: source.userHandle,
+            publicKeyRaw: source.publicKeyRaw,
+            deviceName: source.deviceName
+        )
+        credentials[targetId] = seeded
+        clusterTLSStates[targetId] = sourceTLSState
+        fixtures[targetId] = Fixture(
+            hasBootstrapCert: false,
+            hasSEPKey: true,
+            certValidBefore: nil,
+            credentialID: Data(base64URLEncoded: source.credentialID) ?? Data(),
+            userHandle: Data(base64URLEncoded: source.userHandle) ?? Data(),
+            deviceName: source.deviceName
+        )
+        return true
+    }
 }
 
 // MARK: - Credential invalidation seam

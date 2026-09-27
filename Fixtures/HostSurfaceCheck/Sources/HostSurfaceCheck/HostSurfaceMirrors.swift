@@ -61,6 +61,15 @@ protocol HostTeleportKeyRingStoring: AnyObject, ObservableObject {
     func liveEd25519PrivateKey(for clusterId: UUID) -> Data?
     func storeEd25519PrivateKey(_ pemData: Data, for clusterId: UUID) throws
     func clear(for clusterId: UUID)
+
+    /// Whether this row's registration is a complete, live source for reuse by
+    /// a duplicate server (the host's add-server / row-tap entry point).
+    func isReusableRegistrationSource(for serverId: UUID, clusterName: String?) -> Bool
+
+    /// Copy the registration metadata + cluster TLS state from `sourceId` to
+    /// `targetId` without the cert/key.
+    @discardableResult
+    func seedRegistration(from sourceId: UUID, to targetId: UUID) -> Bool
 }
 
 extension TeleportKeyRing: HostTeleportKeyRingStoring {}
@@ -636,6 +645,56 @@ enum HostCredentialInvalidationMirror {
             oldUsername: "pier",
             newUsername: "deploy"
         )
+    }
+}
+
+// MARK: - Mirror: host credential reuse (`Server` row + keyring helpers)
+
+/// The host's `Server` conforms to the package row protocol in Phase 2; this
+/// struct mirrors the host's row shape so `TeleportCredentialReuse.match`
+/// compiles from outside the package.
+struct HostCredentialReuseRow: TeleportCredentialReuseRow {
+    let id: UUID
+    let displayName: String
+    let host: String
+    let username: String
+    let isFaceIDTeleport: Bool
+}
+
+/// The host's `TeleportKeyRing+Reuse.swift` orchestration (host-side until
+/// Phase 2) is mirrored here: the pure matcher plus the two keyring helpers.
+@MainActor
+enum HostCredentialReuseMirror {
+    static func seedReuseIfPossible(
+        keyRing: any HostTeleportKeyRingStoring,
+        newRow: HostCredentialReuseRow,
+        liveRows: [HostCredentialReuseRow]
+    ) -> String? {
+        let newClusterName = keyRing.clusterTLSState(for: newRow.id)?.clusterName
+        guard let source = TeleportCredentialReuse.match(
+            newRow: newRow,
+            liveRows: liveRows,
+            credentials: keyRing.credentials,
+            clusterName: { keyRing.clusterTLSState(for: $0)?.clusterName },
+            isReusable: { keyRing.isReusableRegistrationSource(for: $0, clusterName: newClusterName) }
+        ) else {
+            return nil
+        }
+        guard keyRing.seedRegistration(from: source.id, to: newRow.id) else { return nil }
+        return source.displayName
+    }
+
+    static func seedReuseOnKeyRingAndMock() {
+        let newRow = HostCredentialReuseRow(
+            id: UUID(),
+            displayName: "duplicate",
+            host: "teleport.example.com",
+            username: "pier",
+            isFaceIDTeleport: true
+        )
+        let keyRing = HostCompositionMirror.makeKeyRing(logging: DefaultTeleportLogging())
+        _ = seedReuseIfPossible(keyRing: keyRing, newRow: newRow, liveRows: [])
+        _ = seedReuseIfPossible(keyRing: MockTeleportKeyRing(), newRow: newRow, liveRows: [])
     }
 }
 
