@@ -174,7 +174,7 @@ struct TeleportCoordinatorSmokeTests {
             tlsKeyPairGenerator: try! TeleportFixtureSupport.makeFixedTLSGenerator(),
             now: { TeleportFixtureSupport.fixtureClock }
         )
-        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "pier")
+        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "user-cert-ed25519")
 
         await coordinator.begin(cluster: cluster)
 
@@ -187,7 +187,7 @@ struct TeleportCoordinatorSmokeTests {
     @Test
     func loginCoordinatorIssuesAndStoresACert() async {
         let keyRing = MockTeleportKeyRing()
-        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "pier")
+        let cluster = TeleportCluster(host: "teleport.pcad.it", username: "user-cert-ed25519")
         keyRing.seed(
             clusterId: cluster.id,
             fixture: MockTeleportKeyRing.Fixture(
