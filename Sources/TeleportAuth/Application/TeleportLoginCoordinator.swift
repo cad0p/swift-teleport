@@ -149,7 +149,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
 
     public func begin(cluster: TeleportCluster) async {
         state = .idle
-        logger.info("beginning login for cluster \(cluster.host, privacy: .public)")
+        logger.info("beginning login for cluster \(cluster.host, privacy: .private(mask: .hash))")
 
         // ── Load the registered SEP key + userHandle ────────────────────
         // The credentialID + userHandle were persisted at Phase 2. The SEP
@@ -216,7 +216,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
             state = .failed(.server("login/begin: \(error.errorDescription ?? "WebAuthn rpID rejected")"))
             return
         }
-        logger.info("login/begin: challenge \(challenge.count)B, rpID=\(rpID, privacy: .public)")
+        logger.info("login/begin: challenge \(challenge.count)B, rpID=\(rpID, privacy: .private(mask: .hash))")
 
         // ── Step 2: WebAuthn.login (Face ID prompt) ──────────────────────
         // This is the in-app Face ID prompt. SecKeyCreateSignature blocks

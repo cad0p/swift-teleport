@@ -118,6 +118,35 @@ nonisolated final class TeleportRedactionTests: XCTestCase {
             .deletingLastPathComponent()  // Tests/
     }
 
+    /// Walks `Sources/<directory>` and returns every `(path, line)` whose text
+    /// contains at least one of `needles`. Package-local by design: the
+    /// source-level pins are the only thing that can observe the annotation
+    /// *form* (the simulator log store does not mask privacy on readback), so
+    /// the walk is shared instead of re-globbing a file list per test.
+    @MainActor
+    private func sourceLines(
+        under directory: String,
+        matching needles: [String]
+    ) throws -> [(path: String, line: String)] {
+        let root = repositoryRoot().appendingPathComponent(directory)
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: nil
+        ) else {
+            return []
+        }
+        var matches: [(path: String, line: String)] = []
+        for case let url as URL in enumerator where url.pathExtension == "swift" {
+            let source = try String(contentsOf: url, encoding: .utf8)
+            let path = url.path.replacingOccurrences(of: repositoryRoot().path + "/", with: "")
+            for line in source.components(separatedBy: "\n")
+            where needles.contains(where: { line.contains($0) }) {
+                matches.append((path: path, line: line))
+            }
+        }
+        return matches
+    }
+
     // MARK: - BrowserMFACeremony
 
     /// A gRPC stub that captures the redirect URL and returns a challenge with
@@ -377,6 +406,87 @@ nonisolated final class TeleportRedactionTests: XCTestCase {
                 publicInterpolation.numberOfMatches(in: line, range: range),
                 0,
                 "the Teleport username must not be logged publicly: \(line)"
+            )
+        }
+    }
+
+    /// The Teleport proxy FQDN is environment metadata of the same class as
+    /// the SSH `server.host`, which `SSHClient` hashes
+    /// (`privacy: .private(mask: .hash)`). The cluster name and the auth-route
+    /// ALPN (`teleport-auth@<hex(clusterName)>`, the FQDN hex-encoded) are the
+    /// same value wearing a different label. A `.public` interpolation here
+    /// publishes the proxy host in the clear to the unified log and any
+    /// exported diagnostics.
+    ///
+    /// The source-level walk is required for the same reason as the pins
+    /// above: the simulator log store does not mask privacy on readback, so
+    /// only the annotation *form* is observable. Each expression is pinned by
+    /// its exact `privacy: .private(mask: .hash)` interpolation count plus a
+    /// zero-match public-interpolation regex. The count doubles as the
+    /// non-vacuity guard: a renamed value drops to zero and fails the pin
+    /// instead of silently disabling the invariant. The regex matches a whole
+    /// interpolation (`\(value, privacy: .public)`), not a line substring, so
+    /// the legitimate public siblings on the same line
+    /// (`clusterId.uuidString`, `Self.alpnProtocol`, the localized error
+    /// description) cannot hide a public FQDN interpolation.
+    ///
+    /// Scope, stated honestly: this is a formatting heuristic. A multi-line
+    /// interpolation, an alias (`let h = cluster.host`), a renamed variable,
+    /// or a `\(...)` form outside these patterns escapes it. It is a
+    /// tripwire, not a proof; the behavioural tests remain the gate.
+    @MainActor
+    func testFQDNClassIsNeverLoggedPublicly() throws {
+        let markers = [
+            "host=\\(", "dial=\\(", "cluster=\\(", "rpID=\\(",
+            "cluster.host", "self.host", "clusterName",
+            "name=\\(state.clusterName",
+        ]
+        let walked = try sourceLines(under: "Sources", matching: markers)
+
+        // Non-vacuity guard: the walk must actually see the FQDN log sites.
+        XCTAssertGreaterThanOrEqual(
+            walked.count,
+            40,
+            "the FQDN marker walk found suspiciously few lines; a rename would silently disable this invariant"
+        )
+
+        // Every FQDN-class value expression and the number of private
+        // interpolations the tree must carry: 13 across the 12 sites (the
+        // `tls_setup` line logs `cluster=` and `alpn=` together).
+        let fqdnExpressions: [(expression: String, privateInterpolations: Int)] = [
+            (#"cluster\.host"#, 3),
+            (#"rpID"#, 2),
+            (#"self\.host"#, 5),
+            (#"clusterName"#, 1),
+            (#"state\.clusterName"#, 1),
+            (#"alpnProto"#, 1),
+        ]
+
+        for (expression, expected) in fqdnExpressions {
+            let privateInterpolation = try NSRegularExpression(
+                pattern: #"\("# + expression + #",\s*privacy:\s*\.private\(mask:\s*\.hash\)\)"#
+            )
+            let publicInterpolation = try NSRegularExpression(
+                pattern: #"\("# + expression + #",\s*privacy:\s*\.public\)"#
+            )
+            var privateCount = 0
+            var publicMatches: [String] = []
+            for (path, line) in walked {
+                let range = NSRange(line.startIndex..<line.endIndex, in: line)
+                privateCount += privateInterpolation.numberOfMatches(in: line, range: range)
+                if publicInterpolation.numberOfMatches(in: line, range: range) > 0 {
+                    publicMatches.append("\(path): \(line)")
+                }
+            }
+
+            XCTAssertEqual(
+                privateCount,
+                expected,
+                "expected \(expected) `privacy: .private(mask: .hash)` interpolation(s) of \(expression); found \(privateCount) — a renamed value would silently disable this invariant"
+            )
+            XCTAssertTrue(
+                publicMatches.isEmpty,
+                "an FQDN-class interpolation is logged `privacy: .public`: \(publicMatches)"
             )
         }
     }

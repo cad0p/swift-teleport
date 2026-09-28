@@ -1,6 +1,6 @@
 # Test Coverage
 
-`swift test` runs **411 tests** across two frameworks and three targets:
+`swift test` runs **412 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
@@ -8,8 +8,8 @@
 | `TeleportCoreTests` | XCTest | 6 | 77 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
 | `TeleportPackageTests` | Swift Testing | 9 | 63 |
-| `TeleportPackageTests` | XCTest | 13 | 127 |
-| **Total** | | | **411** |
+| `TeleportPackageTests` | XCTest | 13 | 128 |
+| **Total** | | | **412** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -42,7 +42,7 @@
 | `TeleportLoginWireTests` | XCTest | `LoginFinishReq` v16/v17 field compat (1) |
 | `SEPSignerAlgorithmTests` | XCTest | signer algorithm/label contract + nested SEP key attributes (2) |
 | `TeleportFrozenTextTests` | XCTest | frozen error texts + listener defaults wiring + OSStatus signer classification (16) |
-| `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime + listener rejection reasons) (17) |
+| `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime + listener rejection reasons) (18) |
 | `TeleportBootstrapCoordinatorTimeoutTests` | XCTest | timeout classification + wrapped-cancel asymmetry (10) |
 | `TeleportBootstrapCoordinatorGenerationTests` | XCTest | stale-continuation request-generation guards (7) |
 | `TeleportSynchronousReleaseTests` | XCTest | isolated-deinit synchronous release (1) |
