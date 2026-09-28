@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [calver-released]
+
+<!-- USER-EDITABLE SECTION START -->
+<!-- Add your curated release notes here. -->
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Hash the cluster FQDN class in log interpolations (closes #32)
+
+### 📚 Documentation
+
+- Refresh the README status and PROVENANCE version labels for v0.3.1 (closes #30)
+
+
 ## [0.3.1] - 2026-09-27
 
 <!-- USER-EDITABLE SECTION START -->
