@@ -456,11 +456,12 @@ nonisolated final class TeleportRedactionTests: XCTestCase {
         )
 
         // Every FQDN-class value expression and the number of private
-        // interpolations the tree must carry: 16 across 14 sites (the
+        // interpolations the tree must carry: 15 across 13 sites (the
         // `tls_setup` line logs `cluster=` and `alpn=` together, and the
         // `teleport_tls_verify_failed` line logs `alpn=` and `allowed_alpn=`
         // — the auth-route ALPN is `teleport-auth@<hex(clusterName)>`, i.e.
-        // the FQDN hex-encoded).
+        // the FQDN hex-encoded). The two ALPN pins share that one line, which
+        // is why the interpolation count exceeds the site count.
         let fqdnExpressions: [(expression: String, privateInterpolations: Int)] = [
             (#"cluster\.host"#, 3),
             (#"rpID"#, 2),
@@ -468,7 +469,10 @@ nonisolated final class TeleportRedactionTests: XCTestCase {
             (#"clusterName"#, 1),
             (#"state\.clusterName"#, 1),
             (#"alpnProto"#, 1),
-            (#"negotiatedALPN \?\? "nil""#, 1),
+            // The fallback literal is matched tolerantly (`[^"]*`): changing
+            // `?? "nil"` to another placeholder must not fail this pin —
+            // only the annotation's privacy class matters here.
+            (#"negotiatedALPN \?\? "[^"]*""#, 1),
             (#"alpnList"#, 1),
         ]
 
