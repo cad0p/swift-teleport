@@ -53,7 +53,12 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         }
         let libssh2FD = fds[0]
         let pumpFD = fds[1]
-        addDescriptorTeardown([libssh2FD])
+        // Registered immediately, before the closer can free `pumpFD` and
+        // `dup2` can reuse it: a crash between creation and the old late
+        // registration would have leaked the number (the `F_GETFD` guard
+        // skips it once the closer has closed it, and closes it when the
+        // reuse below succeeded).
+        addDescriptorTeardown([libssh2FD, pumpFD])
 
         let closer = PumpFDCloser()
         closer.closeOnce(pumpFD)
@@ -75,7 +80,6 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
             "the test needs to force reuse of the freed descriptor number"
         )
         if unrelated != pumpFD { Darwin.close(unrelated) }
-        addDescriptorTeardown([pumpFD])
 
         // Every later close must be a no-op: the reused descriptor must
         // survive (a second close here would close /dev/null's descriptor).
@@ -193,7 +197,9 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
     /// A shutdown followed by a close still closes exactly once.
     func testCloseOnceAfterShutdownClosesExactlyOnce() throws {
         let pair = try SSHTLSTransport.makeSocketPair()
-        addDescriptorTeardown([pair.libssh2FD])
+        // Registered before the first close/reuse below: a crash between
+        // creation and the old late registration would have leaked `pumpFD`.
+        addDescriptorTeardown([pair.libssh2FD, pair.pumpFD])
 
         let closer = PumpFDCloser()
         closer.shutdownOnce(pair.pumpFD)
@@ -211,7 +217,6 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(unrelated, 0)
         XCTAssertEqual(Darwin.dup2(unrelated, pair.pumpFD), pair.pumpFD)
         if unrelated != pair.pumpFD { Darwin.close(unrelated) }
-        addDescriptorTeardown([pair.pumpFD])
 
         closer.closeOnce(pair.pumpFD)
         XCTAssertNotEqual(
@@ -395,7 +400,7 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
                 )
                 Darwin.close(pumpFD)
             } else {
-                XCTFail("close() must join the parked send and release the pump fd")
+                XCTFail("close() must release the pump fd with a large outstanding send (hang regression for the parked-send case)")
             }
         }
 
@@ -409,16 +414,23 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
                 alpnProtocols: [SSHTLSTransport.alpnProtocol, "h2"]
             )
             var transport: SSHTLSTransport? = Self.makeLoopbackTransport(server: server)
-            let fd = try await XCTUnwrap(transport).connect()
-            // Cleanup on every path: the fd close always runs. When a failed
-            // unwrap aborts before `close()`, dropping the transport releases
-            // the actor and stopping the server cancels the connection, so the
-            // pump's detached body (which holds the pair/closer strongly)
-            // still releases `pumpFD`.
+            // Registered BEFORE `connect()`, which can throw: a throwing path
+            // would otherwise fall back to `LoopbackTLSServer.deinit`, which
+            // cancels only the listener. The fd box tolerates the
+            // pre-connect case (-1): when `connect()` fails there is no
+            // returned fd to close, and the transport's own catch releases
+            // the pump side. When a later unwrap aborts after `connect()`,
+            // dropping the transport releases the actor and stopping the
+            // server cancels the connection, so the pump's detached body
+            // (which holds the pair/closer strongly) still releases `pumpFD`.
+            let fdBox = OSAllocatedUnfairLock(initialState: Int32(-1))
             addTeardownBlock {
-                if Darwin.fcntl(fd, F_GETFD) != -1 { Darwin.close(fd) }
+                let fd = fdBox.withLock { $0 }
+                if fd >= 0, Darwin.fcntl(fd, F_GETFD) != -1 { Darwin.close(fd) }
                 await server.stop()
             }
+            let fd = try await XCTUnwrap(transport).connect()
+            fdBox.withLock { $0 = fd }
 
             let capturedPumpFD = await transport?.pumpFdForTesting
             let pumpFD = try XCTUnwrap(capturedPumpFD)
@@ -585,9 +597,14 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
 
         // (d) The connect-failure path's ordering: the release is gated on
         // this path owning the pump task, wakes before the join, and runs
-        // after it. Deleting `await pump.value` from the catch used to leave
-        // the whole suite green, so this slice is the only pin for it. Same
-        // formatting-heuristic caveat as the pins above.
+        // after it — all inside the gate's braces. Deleting `await pump.value`
+        // from the catch used to leave the whole suite green, so this slice is
+        // the only pin for it. Same formatting-heuristic caveat as the pins
+        // above, and the containment asserts share it: `bracedBlock` is a
+        // character-level depth walk that does not strip string literals or
+        // comments, so a brace in either inside this slice would unbalance the
+        // gate span — the `XCTUnwrap` anchors keep that a loud failure rather
+        // than a silent pass.
         let connectCatchStart = try XCTUnwrap(
             source.range(of: "let pump = pumpTask"),
             "the connect-failure catch must capture the pump task first"
@@ -598,10 +615,11 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
             "the connect-failure catch slice end not found"
         )
         let connectCatch = connectCatchTail[connectCatchTail.startIndex..<connectCatchEnd.lowerBound]
-        XCTAssertTrue(
-            connectCatch.contains("if let pump"),
+        let gateAnchor = try XCTUnwrap(
+            connectCatch.range(of: "if let pump"),
             "the connect-failure release must be gated on owning the pump task"
         )
+        let gateBody = try Self.bracedBlock(after: gateAnchor, in: connectCatch)
         let connectJoin = try XCTUnwrap(
             connectCatch.range(of: "await pump"),
             "the connect-failure path must join the pump before releasing"
@@ -609,6 +627,18 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         XCTAssertTrue(
             connectCatch[connectCatch.startIndex..<connectJoin.lowerBound].contains("shutdownOnce("),
             "the connect-failure path must wake the pump before the join"
+        )
+        let connectWake = try XCTUnwrap(
+            connectCatch.range(of: "shutdownOnce("),
+            "the connect-failure path must wake the pump before the join"
+        )
+        XCTAssertTrue(
+            Self.isInside(gateBody, connectWake.lowerBound),
+            "the connect-failure wake must sit inside the `if let pump` gate"
+        )
+        XCTAssertTrue(
+            Self.isInside(gateBody, connectJoin.lowerBound),
+            "the connect-failure join must sit inside the `if let pump` gate"
         )
         var connectCloseOnceRanges: [Range<String.Index>] = []
         var connectSearchStart = connectCatch.startIndex
@@ -629,6 +659,10 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
             connectRelease.lowerBound,
             connectJoin.upperBound,
             "the connect-failure release must run after the join"
+        )
+        XCTAssertTrue(
+            Self.isInside(gateBody, connectRelease.lowerBound),
+            "the connect-failure release must sit inside the `if let pump` gate"
         )
     }
 
@@ -697,6 +731,44 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         guard let terminator else { return tail }
         let end = try XCTUnwrap(tail.range(of: terminator), "\(name) body end not found")
         return tail[tail.startIndex..<end.lowerBound]
+    }
+
+    /// The body span `{ … }` of the first brace-delimited block after `anchor`,
+    /// found by a character-level depth walk from its opening brace.
+    ///
+    /// Same FORMATTING HEURISTIC class as the other pins: the walk does not
+    /// strip string literals or comments, so a brace inside either inside the
+    /// slice would unbalance the match. A mis-slice cannot pass vacuously: an
+    /// absent or unbalanced block fails the `XCTUnwrap` here, and the
+    /// containment asserts it feeds fail when a pinned token sits outside.
+    private static func bracedBlock(
+        after anchor: Range<String.Index>,
+        in text: Substring
+    ) throws -> Range<String.Index> {
+        let open = try XCTUnwrap(
+            text[anchor.upperBound...].firstIndex(of: "{"),
+            "the pin anchor must be followed by a `{`"
+        )
+        var depth = 0
+        var close: String.Index?
+        var index = open
+        while index < text.endIndex, close == nil {
+            if text[index] == "{" {
+                depth += 1
+            } else if text[index] == "}" {
+                depth -= 1
+                if depth == 0 { close = index }
+            }
+            index = text.index(after: index)
+        }
+        let blockClose = try XCTUnwrap(close, "the pin anchor's braces must balance")
+        return text.index(after: open)..<blockClose
+    }
+
+    /// Whether `index` falls strictly inside the `block` span (the span
+    /// returned by `bracedBlock` excludes the braces themselves).
+    private static func isInside(_ block: Range<String.Index>, _ index: String.Index) -> Bool {
+        block.lowerBound < index && index < block.upperBound
     }
 
     /// Assert `syscall` occurs only inside the `state.withLock { … }` body of
