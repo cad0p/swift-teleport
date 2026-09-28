@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [calver-released]
+
+<!-- USER-EDITABLE SECTION START -->
+<!-- Add your curated release notes here. -->
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Pump-fd shutdown/close split so no syscall starts after release (closes #36)
+
+
 ## [0.3.2] - 2026-09-28
 
 <!-- USER-EDITABLE SECTION START -->
