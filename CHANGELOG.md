@@ -2,6 +2,43 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.3] - 2026-09-28
+
+<!-- USER-EDITABLE SECTION START -->
+Pump-fd use-after-release fix (#36), matching the host fix
+[`cad0p/vvterm#237`](https://github.com/cad0p/vvterm/issues/237):
+
+- `PumpFDCloser` is now one lock-serialized `open -> shutDown -> closed` state
+  machine (mirroring the in-repo `AtomicSocket`). `shutdownOnce(_:)` wakes an
+  in-flight `read`/`write` on the socketpair pump end (read -> `0`, write ->
+  `EPIPE` under the already-set `SO_NOSIGPIPE`) **without** freeing the
+  descriptor number; `closeOnce(_:)` releases it and is terminal for both.
+  Both syscalls run inside the state lock, so a preempted call can never reach a
+  freed or reused number;
+- `runPump` joins both loops before releasing:
+  `group.next() -> group.cancelAll() -> shutdownOnce -> connection.cancel() ->
+  await group.waitForAll() -> closeOnce`. Previously the pump end was closed as
+  soon as **one** loop exited while the sibling was only cancelled, so a
+  `read`/`write` could start on the number after `close(2)` freed it — a `read`
+  forwarded unrelated bytes to the server, a `write` corrupted an unrelated file;
+- the TLS-handshake-failure path releases only from a path that has joined the
+  pump; when a concurrent `close()` already took the task, `runPump` owns the
+  release after its own join;
+- `writeAllToPumpFD` is cancellation-aware, and the pump bodies are
+  `nonisolated static` with no `self` capture, so a dying actor cannot strand
+  the descriptor;
+- the closer's suite grew 3 -> 10 cases, including a brace-matched pin that the
+  connect-failure release sits **inside** the joined-pump gate.
+
+Patch release: no public API change. The host half is
+[`cad0p/vvterm#285`](https://github.com/cad0p/vvterm/pull/285).
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Pump-fd shutdown/close split so no syscall starts after release (closes #36)
+
+
 ## [0.3.2] - 2026-09-28
 
 <!-- USER-EDITABLE SECTION START -->
