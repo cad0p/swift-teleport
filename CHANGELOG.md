@@ -38,6 +38,7 @@ Patch release: no public API change. The host half is
 
 - *(teleport)* Pump-fd shutdown/close split so no syscall starts after release (closes #36)
 
+
 ## [0.3.2] - 2026-09-28
 
 <!-- USER-EDITABLE SECTION START -->
