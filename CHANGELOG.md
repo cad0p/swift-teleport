@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.2] - 2026-09-28
+
+<!-- USER-EDITABLE SECTION START -->
+FQDN log redaction (#32), matching the host fix
+[`cad0p/vvterm#275`](https://github.com/cad0p/vvterm/issues/275):
+
+- every `privacy: .public` interpolation of an environment FQDN in the Teleport
+  paths is now `.private(mask: .hash)` — 15 interpolations across 13 lines:
+  `cluster.host` x3, `rpID` x2, the TLS dial `self.host` x5, `clusterName` /
+  `state.clusterName` x2, `alpnProto` x1, and the two ALPN values on the
+  `teleport_tls_verify_failed` line;
+- the auth-route ALPN (`teleport-auth@<hex(clusterName)>`) is the cluster FQDN
+  hex-encoded, so it is hashed like the server names it sits beside;
+- a package-local tripwire (`testFQDNClassIsNeverLoggedPublicly`) pins each
+  expression's private-interpolation count and reports any whole-interpolation
+  `.public` match, so a reverted annotation fails by name.
+
+Kept `.public` by decision: UUIDs, ports, counts, protocol constants, statuses,
+and the documented `error.localizedDescription` / `String(describing:)`
+transport-error carve-outs.
+
+Patch release: no public API change. The host half is
+[`cad0p/vvterm#282`](https://github.com/cad0p/vvterm/pull/282).
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Hash the cluster FQDN class in log interpolations (closes #32)
+
+### 📚 Documentation
+
+- Refresh the README status and PROVENANCE version labels for v0.3.1 (closes #30)
+
+
 ## [0.3.1] - 2026-09-27
 
 <!-- USER-EDITABLE SECTION START -->
