@@ -35,11 +35,16 @@ public protocol TeleportChannelTransport: Sendable {
     func start() async throws -> Int32
 
     /// Tear down the pump + the pump-end FD. `async` because the conforming
-    /// implementation is an actor.
+    /// implementation is an actor. The pump end is woken (shut down)
+    /// immediately; its descriptor is released by the pump once its loops have
+    /// joined, so this does not free the number while a syscall could still
+    /// start on it.
     func close() async
 
     /// Stop the pump synchronously (callable without `await`) so the caller
-    /// can free the outer libssh2 session without a use-after-free.
+    /// can free the outer libssh2 session without a use-after-free. Wakes the
+    /// pump end without freeing the descriptor number; the pump releases it
+    /// after its loops join.
     nonisolated func cancelPumpSync()
 }
 

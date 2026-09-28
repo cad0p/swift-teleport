@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **412 tests** across two frameworks and three targets:
+`swift test` runs **419 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
 | `TeleportCoreTests` | Swift Testing | 7 | 137 |
-| `TeleportCoreTests` | XCTest | 6 | 77 |
+| `TeleportCoreTests` | XCTest | 6 | 84 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
 | `TeleportPackageTests` | Swift Testing | 9 | 63 |
 | `TeleportPackageTests` | XCTest | 13 | 128 |
-| **Total** | | | **412** |
+| **Total** | | | **419** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -25,7 +25,7 @@
 | `HeadlessIDTests` | XCTest | `HeadlessID.compute` UUIDv5 golden vectors (4) |
 | `TeleportProxySubsystemTests` | Swift Testing | `TeleportProxySubsystem.request` |
 | `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) (13) |
-| `SSHTLSTransportPumpFDCloserTests` | XCTest | pump-fd single ownership (fd reuse, source tripwire, `SO_NOSIGPIPE`) (3) |
+| `SSHTLSTransportPumpFDCloserTests` | XCTest | pump-fd single ownership and the #237 shutdown/release split (`shutdownOnce` wakes without freeing, `closeOnce` releases exactly once, fd reuse, join ordering, full-buffer write, parked send, actor-gone release, source tripwire, `SO_NOSIGPIPE`) (10) |
 | `TeleportTLSTrustTests` | Swift Testing | `TeleportTLSTrust` (chain/name/EKU/ALPN + DER fail-closed matrix) |
 | `TeleportHostLoginTests` | Swift Testing | `TeleportHostLogin` resolver + normalization + failure redaction (21) |
 | `TeleportIssuedCertValidatorTests` | Swift Testing | issued-cert binding checks (12) |

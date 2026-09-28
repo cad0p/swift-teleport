@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **412 tests** pass (205 XCTest + 207
+Expected: build clean (no warnings), **419 tests** pass (212 XCTest + 207
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds.
@@ -75,9 +75,19 @@ follow-up commits on the same branch; the PR description records the rounds.
 
 ### Transport / TLS change
 - `TeleportTLSTrustTests` + `SSHTLSTransportTests` (including the pump-fd
-  single-ownership guard) + `SSHTLSTransportPumpFDCloserTests` (fd-reuse via
-  `dup2`, the source tripwire, and the `SO_NOSIGPIPE` SIGPIPE counterfactual)
-  green, including the loopback handshake and the fail-closed DER matrix.
+  single-ownership guard) + `SSHTLSTransportPumpFDCloserTests` green.
+  `SSHTLSTransportPumpFDCloserTests` covers the #234 fd-reuse `dup2` guard, the
+  source tripwire, and the `SO_NOSIGPIPE` SIGPIPE counterfactual, plus the
+  #237 shutdown/release split: `shutdownOnce` wakes without freeing the number
+  (read EOF / write EPIPE, still open), `closeOnce` after shutdown releases
+  exactly once, a stale `shutdownOnce` after `closeOnce` leaves a `dup2`-reused
+  descriptor fully writable, a cancelled `writeAllToPumpFD` escapes a full
+  socketpair buffer within a bounded deadline, `close()` releases the pump fd
+  with a parked `NWConnection.send` and after the actor is released, a
+  full-buffer write is unblocked by `shutdownOnce`, and the lexical pins hold
+  `runPump`'s wake-before-join/release-after-join ordering, the two-argument
+  `closeOnce` call-site allowlist, and the in-lock syscalls. Also green: the
+  loopback handshake and the fail-closed DER matrix.
 - Re-check the `nonisolated` markers on `TeleportTLSTrust` and
   `TeleportLogging` if isolation changed, and — when `SSHTLSTransport`,
   `PumpFDCloser`, or any coordinator/generator/keyring class is touched — that
