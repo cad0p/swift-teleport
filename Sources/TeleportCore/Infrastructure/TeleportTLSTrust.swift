@@ -685,8 +685,12 @@ nonisolated public enum TeleportTLSTrust {
                 let nameList = serverNames.joined(separator: ",")
                 let alpnList = allowedALPNs.joined(separator: ",")
                 let errorDescription = result.error.map { String(describing: $0) } ?? "unknown"
+                // The ALPN list embeds the auth route
+                // (`teleport-auth@<hex(clusterName)>`) — the FQDN hex-encoded
+                // — so both ALPN values are hashed like the server names and
+                // the error text (#275).
                 logger.error(
-                    "teleport_tls_verify_failed server_names=\(nameList, privacy: .private(mask: .hash)) alpn=\(negotiatedALPN ?? "nil", privacy: .public) allowed_alpn=\(alpnList, privacy: .public) error=\(errorDescription, privacy: .private(mask: .hash))"
+                    "teleport_tls_verify_failed server_names=\(nameList, privacy: .private(mask: .hash)) alpn=\(negotiatedALPN ?? "nil", privacy: .private(mask: .hash)) allowed_alpn=\(alpnList, privacy: .private(mask: .hash)) error=\(errorDescription, privacy: .private(mask: .hash))"
                 )
             }
             complete(result.ok)

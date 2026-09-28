@@ -239,7 +239,7 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         headlessID = ""
         state = .preparing
 
-        logger.info("beginning bootstrap for cluster \(cluster.host, privacy: .public) user=\(cluster.username, privacy: .private)")
+        logger.info("beginning bootstrap for cluster \(cluster.host, privacy: .private(mask: .hash)) user=\(cluster.username, privacy: .private)")
 
         // ── Step 1: generate the ephemeral SSH + TLS keypairs ────────────
         // The SSH keypair is ed25519 (for the cert subject + the eventual
