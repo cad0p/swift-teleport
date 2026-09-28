@@ -318,12 +318,22 @@ public actor SSHTLSTransport {
             let closer = self.pumpFDCloser   // local, still ours
             socketPair = nil
             self.pumpFDCloser = nil
-            pump?.cancel()
-            // Wake before joining: a loop parked in the EAGAIN write retry
-            // does not observe cancellation on its own.
-            closer?.shutdownOnce(pair.pumpFD)
-            await pump?.value
-            closer?.closeOnce(pair.pumpFD)
+            // Release only from a path that has joined the pump. If a
+            // concurrent `close()` took the task (it nils `pumpTask` while
+            // this path was suspended in `waitForReady`), `runPump` owns the
+            // release: its detached body holds the pair/closer strongly and
+            // always runs shutdownOnce -> cancel -> waitForAll -> closeOnce.
+            // Releasing here without a captured task would free the number
+            // while the cancelled loops are still winding down — the #237
+            // window this path used to have.
+            if let pump {
+                pump.cancel()
+                // Wake before joining: a loop parked in the EAGAIN write retry
+                // does not observe cancellation on its own.
+                closer?.shutdownOnce(pair.pumpFD)
+                await pump.value
+                closer?.closeOnce(pair.pumpFD)
+            }
             // Deliberately not joined: the pump loops only ever touch
             // `pair.pumpFD`. This end was never handed to libssh2 or a caller
             // on this path, so nothing can start a syscall on it.
@@ -345,8 +355,11 @@ public actor SSHTLSTransport {
     /// The pump end is closed by `runPump`, after both of its loops have
     /// joined, so this returns without freeing the descriptor number (issue
     /// #237: a loop that started a syscall after `close(2)` could land on a
-    /// reused descriptor). The guard and the pair are kept, not nilled, so
-    /// the release stays observable; the next `connect()` replaces them.
+    /// reused descriptor). The guard and the pair are deliberately kept, not
+    /// nilled, so the release stays observable through the `…ForTesting`
+    /// seams. The retained pair is a stale record, not a live descriptor once
+    /// the closer reaches `.closed`: nothing may close or shut it down again,
+    /// and the next `connect()` replaces both.
     ///
     /// Safe to call multiple times.
     public func close() {
@@ -372,7 +385,8 @@ public actor SSHTLSTransport {
 
     /// Test seam: the pump end's descriptor number, captured before
     /// `close()` so a test can assert the release (`fcntl(fd, F_GETFD) == -1`)
-    /// afterwards.
+    /// afterwards. Retained after `close()` deliberately (see `close()`); the
+    /// number is stale once the closer's state is `.closed`.
     var pumpFdForTesting: Int32? { socketPair?.pumpFD }
 
     // MARK: - Pump internals
@@ -651,6 +665,11 @@ public actor SSHTLSTransport {
 /// repeated `close(2)` surfaced as a spurious fixture-read failure in an
 /// unrelated suite while four handshake-failure tests were tearing their pumps
 /// down (2026-09-24, CI run 35964528444).
+///
+/// The `shutdown(2)`/`close(2)` return values are deliberately ignored: single
+/// ownership means `EBADF`/`EINTR` cannot leave recoverable state, `.closed`
+/// is terminal, and a retry would risk touching a number a concurrent release
+/// has already freed.
 nonisolated final class PumpFDCloser: @unchecked Sendable {
     /// Test seam: the closer's state, so a teardown test can assert the
     /// number was released without naming the (private) fd.

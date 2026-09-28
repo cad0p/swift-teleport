@@ -53,7 +53,7 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         }
         let libssh2FD = fds[0]
         let pumpFD = fds[1]
-        defer { Darwin.close(libssh2FD) }
+        addDescriptorTeardown([libssh2FD])
 
         let closer = PumpFDCloser()
         closer.closeOnce(pumpFD)
@@ -75,7 +75,7 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
             "the test needs to force reuse of the freed descriptor number"
         )
         if unrelated != pumpFD { Darwin.close(unrelated) }
-        defer { Darwin.close(pumpFD) }
+        addDescriptorTeardown([pumpFD])
 
         // Every later close must be a no-op: the reused descriptor must
         // survive (a second close here would close /dev/null's descriptor).
@@ -121,10 +121,7 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         // assertion.
         continueAfterFailure = false
         let pair = try SSHTLSTransport.makeSocketPair()
-        defer {
-            Darwin.close(pair.libssh2FD)
-            Darwin.close(pair.pumpFD)
-        }
+        addDescriptorTeardown([pair.libssh2FD, pair.pumpFD])
 
         // Asserted first: if the option is missing, fail here rather than reach
         // the write below, which would raise SIGPIPE and kill the test host.
@@ -161,12 +158,9 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         // A failed assertion must stop this test before the write below.
         continueAfterFailure = false
         let pair = try SSHTLSTransport.makeSocketPair()
-        defer {
-            // The closer may already have released `pumpFD`; a second close
-            // would land on a freed number.
-            if Darwin.fcntl(pair.pumpFD, F_GETFD) != -1 { Darwin.close(pair.pumpFD) }
-            Darwin.close(pair.libssh2FD)
-        }
+        // This test only shuts `pumpFD` down; the teardown's `F_GETFD` guard
+        // skips a number that was freed and reused.
+        addDescriptorTeardown([pair.libssh2FD, pair.pumpFD])
 
         // Asserted first: if the option is missing, fail here rather than
         // reach the write, which would raise SIGPIPE and kill the test host.
@@ -199,7 +193,7 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
     /// A shutdown followed by a close still closes exactly once.
     func testCloseOnceAfterShutdownClosesExactlyOnce() throws {
         let pair = try SSHTLSTransport.makeSocketPair()
-        defer { Darwin.close(pair.libssh2FD) }
+        addDescriptorTeardown([pair.libssh2FD])
 
         let closer = PumpFDCloser()
         closer.shutdownOnce(pair.pumpFD)
@@ -217,9 +211,7 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(unrelated, 0)
         XCTAssertEqual(Darwin.dup2(unrelated, pair.pumpFD), pair.pumpFD)
         if unrelated != pair.pumpFD { Darwin.close(unrelated) }
-        defer {
-            if Darwin.fcntl(pair.pumpFD, F_GETFD) != -1 { Darwin.close(pair.pumpFD) }
-        }
+        addDescriptorTeardown([pair.pumpFD])
 
         closer.closeOnce(pair.pumpFD)
         XCTAssertNotEqual(
@@ -238,14 +230,17 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
     func testShutdownOnceAfterCloseOnceDoesNotTouchAReusedDescriptor() throws {
         continueAfterFailure = false
         let pair = try SSHTLSTransport.makeSocketPair()
-        defer { Darwin.close(pair.libssh2FD) }
 
         // The unrelated descriptor the freed number is reused for is a real
         // socket, so a stale wake is observable on the wire. It comes from
         // `makeSocketPair` so `SO_NOSIGPIPE` is set (the write below must not
         // raise SIGPIPE even under a mutation).
         let unrelated = try SSHTLSTransport.makeSocketPair()
-        defer { Darwin.close(unrelated.libssh2FD) }
+        // `pair.pumpFD` is listed up front: by teardown time the closer has
+        // freed it and `dup2` has reused it for `unrelated.pumpFD`, so both
+        // live descriptors must be closed; a number the closer freed without
+        // reuse fails the `F_GETFD` guard and is skipped.
+        addDescriptorTeardown([pair.libssh2FD, unrelated.libssh2FD, unrelated.pumpFD, pair.pumpFD])
 
         let closer = PumpFDCloser()
         closer.closeOnce(pair.pumpFD)
@@ -254,10 +249,6 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
 
         // Force reuse of the freed number for the unrelated socket.
         XCTAssertEqual(Darwin.dup2(unrelated.pumpFD, pair.pumpFD), pair.pumpFD)
-        Darwin.close(unrelated.pumpFD)
-        defer {
-            if Darwin.fcntl(pair.pumpFD, F_GETFD) != -1 { Darwin.close(pair.pumpFD) }
-        }
 
         closer.shutdownOnce(pair.pumpFD)
 
@@ -302,14 +293,16 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
             return result
         }
         writeTask.cancel()
+        // Teardown on every path (including an abort): closing the peer turns
+        // a still-spinning EAGAIN write into an immediate EPIPE, so a failed
+        // mutation cannot leave a task spinning through the suite, and the
+        // descriptors cannot leak.
+        addTeardownBlock {
+            Darwin.close(pair.libssh2FD)
+            _ = await writeTask.value
+            if Darwin.fcntl(pair.pumpFD, F_GETFD) != -1 { Darwin.close(pair.pumpFD) }
+        }
         let escaped = await Self.waitFor(timeout: 5) { done.withLock { $0 } }
-
-        // Clean up on every path: closing the peer turns a still-spinning
-        // EAGAIN write into an immediate EPIPE, so a failed mutation cannot
-        // leave a task spinning through the suite.
-        Darwin.close(pair.libssh2FD)
-        _ = await writeTask.value
-        if Darwin.fcntl(pair.pumpFD, F_GETFD) != -1 { Darwin.close(pair.pumpFD) }
 
         XCTAssertTrue(escaped, "writeAllToPumpFD did not observe cancellation within the deadline")
     }
@@ -331,10 +324,18 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
                 identity: identity,
                 alpnProtocols: [SSHTLSTransport.alpnProtocol, "h2"]
             )
-            defer { server.stop() }
+            // Teardown blocks, not `defer`: XCTest does not guarantee Swift
+            // `defer` runs when a failed `XCTUnwrap` aborts the test, and a
+            // throwing path here would otherwise leak the transport, the
+            // libssh2 fd and the loopback server.
+            addTeardownBlock { await server.stop() }
 
             let transport = Self.makeLoopbackTransport(server: server)
             let fd = try await transport.connect()
+            addTeardownBlock {
+                await transport.close()
+                if Darwin.fcntl(fd, F_GETFD) != -1 { Darwin.close(fd) }
+            }
 
             // Push more than any plausible socket send buffer: the loopback
             // fixture accepts and never reads, so the pump's `connection.send`
@@ -366,7 +367,10 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
                 }
                 break
             }
-            XCTAssertGreaterThan(pushed, 0, "the pump must drain the socketpair towards send")
+            XCTAssertGreaterThan(
+                pushed, 0,
+                "the test pushed into the socketpair (the writes feed it; the buffer alone absorbs the first ~8 KiB)"
+            )
 
             let capturedCloser = await transport.pumpFDCloserForTesting
             let closer = try XCTUnwrap(capturedCloser)
@@ -393,7 +397,6 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
             } else {
                 XCTFail("close() must join the parked send and release the pump fd")
             }
-            Darwin.close(fd)
         }
 
         // Leg (ii): the actor is released before the pump finishes. The
@@ -405,10 +408,18 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
                 identity: identity,
                 alpnProtocols: [SSHTLSTransport.alpnProtocol, "h2"]
             )
-            defer { server.stop() }
-
             var transport: SSHTLSTransport? = Self.makeLoopbackTransport(server: server)
             let fd = try await XCTUnwrap(transport).connect()
+            // Cleanup on every path: the fd close always runs. When a failed
+            // unwrap aborts before `close()`, dropping the transport releases
+            // the actor and stopping the server cancels the connection, so the
+            // pump's detached body (which holds the pair/closer strongly)
+            // still releases `pumpFD`.
+            addTeardownBlock {
+                if Darwin.fcntl(fd, F_GETFD) != -1 { Darwin.close(fd) }
+                await server.stop()
+            }
+
             let capturedPumpFD = await transport?.pumpFdForTesting
             let pumpFD = try XCTUnwrap(capturedPumpFD)
             let capturedCloser = await transport?.pumpFDCloserForTesting
@@ -422,7 +433,6 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
             }
             XCTAssertTrue(released, "the pump must release the fd after the actor is released")
             XCTAssertEqual(closer.stateForTesting, .closed)
-            Darwin.close(fd)
         }
     }
 
@@ -435,10 +445,7 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
     func testShutdownUnblocksAFullBufferWrite() throws {
         continueAfterFailure = false
         let pair = try SSHTLSTransport.makeSocketPair()
-        defer {
-            if Darwin.fcntl(pair.pumpFD, F_GETFD) != -1 { Darwin.close(pair.pumpFD) }
-            Darwin.close(pair.libssh2FD)
-        }
+        addDescriptorTeardown([pair.libssh2FD, pair.pumpFD])
 
         // Fill the pump end's send buffer (the peer never reads).
         let chunk = Data(repeating: 0x41, count: 64 * 1024)
@@ -575,9 +582,71 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         let closeOnceBody = try Self.methodBody(named: "closeOnce", in: source, endingAt: nil)
         try Self.assertSyscallInsideLock(body: closeOnceBody, syscall: "Darwin.shutdown(", label: "closeOnce")
         try Self.assertSyscallInsideLock(body: closeOnceBody, syscall: "Darwin.close(", label: "closeOnce")
+
+        // (d) The connect-failure path's ordering: the release is gated on
+        // this path owning the pump task, wakes before the join, and runs
+        // after it. Deleting `await pump.value` from the catch used to leave
+        // the whole suite green, so this slice is the only pin for it. Same
+        // formatting-heuristic caveat as the pins above.
+        let connectCatchStart = try XCTUnwrap(
+            source.range(of: "let pump = pumpTask"),
+            "the connect-failure catch must capture the pump task first"
+        )
+        let connectCatchTail = source[connectCatchStart.lowerBound...]
+        let connectCatchEnd = try XCTUnwrap(
+            connectCatchTail.range(of: "throw TeleportPackageError.connectionFailed"),
+            "the connect-failure catch slice end not found"
+        )
+        let connectCatch = connectCatchTail[connectCatchTail.startIndex..<connectCatchEnd.lowerBound]
+        XCTAssertTrue(
+            connectCatch.contains("if let pump"),
+            "the connect-failure release must be gated on owning the pump task"
+        )
+        let connectJoin = try XCTUnwrap(
+            connectCatch.range(of: "await pump"),
+            "the connect-failure path must join the pump before releasing"
+        )
+        XCTAssertTrue(
+            connectCatch[connectCatch.startIndex..<connectJoin.lowerBound].contains("shutdownOnce("),
+            "the connect-failure path must wake the pump before the join"
+        )
+        var connectCloseOnceRanges: [Range<String.Index>] = []
+        var connectSearchStart = connectCatch.startIndex
+        while let range = connectCatch.range(of: "closeOnce(", range: connectSearchStart..<connectCatch.endIndex) {
+            connectCloseOnceRanges.append(range)
+            connectSearchStart = range.upperBound
+        }
+        XCTAssertEqual(
+            connectCloseOnceRanges.count,
+            1,
+            "the connect-failure path must release exactly once"
+        )
+        let connectRelease = try XCTUnwrap(
+            connectCloseOnceRanges.first,
+            "the connect-failure path must release the pump fd"
+        )
+        XCTAssertGreaterThan(
+            connectRelease.lowerBound,
+            connectJoin.upperBound,
+            "the connect-failure release must run after the join"
+        )
     }
 
     // MARK: - Helpers
+
+    /// Register descriptor closes that run on every path, including an abort.
+    /// XCTest does not guarantee Swift `defer` runs when
+    /// `continueAfterFailure = false` aborts a test, so cleanup that only
+    /// closes descriptors belongs here. `fcntl(F_GETFD)` skips a number the
+    /// closer already released (so a stale close cannot land on a reused
+    /// descriptor).
+    private func addDescriptorTeardown(_ fds: [Int32]) {
+        addTeardownBlock {
+            for fd in fds where fd >= 0 && Darwin.fcntl(fd, F_GETFD) != -1 {
+                Darwin.close(fd)
+            }
+        }
+    }
 
     /// Poll `condition` until it is true or the timeout elapses. The bounded
     /// deadline is the assertion: a hung join must fail this test rather than
@@ -591,14 +660,26 @@ nonisolated final class SSHTLSTransportPumpFDCloserTests: XCTestCase {
         return condition()
     }
 
-    /// The nearest preceding `func name(` declaration for a call site (line
-    /// index based; comments are skipped).
+    /// The nearest preceding declaration-shaped `func name(` line for a call
+    /// site (line index based). Only a line whose preamble before `func` is
+    /// empty or modifier-shaped (identifiers, `@` attributes, whitespace) can
+    /// match, so a block comment or a string containing `func ` cannot shadow
+    /// the real declaration; extracting the wrong name still fails loudly
+    /// against the allowlist.
     private static func enclosingFunctionName(before index: Int, in lines: [String]) -> String? {
         guard index > 0 else { return nil }
         for lineIndex in stride(from: index - 1, through: 0, by: -1) {
             let line = lines[lineIndex]
             guard !line.trimmingCharacters(in: .whitespaces).hasPrefix("//") else { continue }
             guard let funcRange = line.range(of: "func ") else { continue }
+            let preamble = line[line.startIndex..<funcRange.lowerBound]
+                .trimmingCharacters(in: .whitespaces)
+            let preambleIsModifierShaped = preamble.split(separator: " ").allSatisfy { token in
+                token.allSatisfy { character in
+                    character.isLetter || character.isNumber || character == "_" || character == "@"
+                }
+            }
+            guard preambleIsModifierShaped else { continue }
             let remainder = line[funcRange.upperBound...]
             guard let paren = remainder.firstIndex(of: "(") else { continue }
             let name = remainder[remainder.startIndex..<paren]

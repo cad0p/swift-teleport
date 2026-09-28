@@ -83,7 +83,8 @@ follow-up commits on the same branch; the PR description records the rounds.
   exactly once, a stale `shutdownOnce` after `closeOnce` leaves a `dup2`-reused
   descriptor fully writable, a cancelled `writeAllToPumpFD` escapes a full
   socketpair buffer within a bounded deadline, `close()` releases the pump fd
-  with a parked `NWConnection.send` and after the actor is released, a
+  with a large outstanding send (hang regression for the parked-send case) and
+  after the actor is released, a
   full-buffer write is unblocked by `shutdownOnce`, and the lexical pins hold
   `runPump`'s wake-before-join/release-after-join ordering, the two-argument
   `closeOnce` call-site allowlist, and the in-lock syscalls. Also green: the

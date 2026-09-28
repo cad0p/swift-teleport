@@ -25,7 +25,7 @@
 | `HeadlessIDTests` | XCTest | `HeadlessID.compute` UUIDv5 golden vectors (4) |
 | `TeleportProxySubsystemTests` | Swift Testing | `TeleportProxySubsystem.request` |
 | `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) (13) |
-| `SSHTLSTransportPumpFDCloserTests` | XCTest | pump-fd single ownership and the #237 shutdown/release split (`shutdownOnce` wakes without freeing, `closeOnce` releases exactly once, fd reuse, join ordering, full-buffer write, parked send, actor-gone release, source tripwire, `SO_NOSIGPIPE`) (10) |
+| `SSHTLSTransportPumpFDCloserTests` | XCTest | pump-fd single ownership and the #237 shutdown/release split (`shutdownOnce` wakes without freeing, `closeOnce` releases exactly once, fd reuse, join ordering, full-buffer write, large outstanding send (hang regression for the parked-send case), actor-gone release, source tripwire, `SO_NOSIGPIPE`) (10) |
 | `TeleportTLSTrustTests` | Swift Testing | `TeleportTLSTrust` (chain/name/EKU/ALPN + DER fail-closed matrix) |
 | `TeleportHostLoginTests` | Swift Testing | `TeleportHostLogin` resolver + normalization + failure redaction (21) |
 | `TeleportIssuedCertValidatorTests` | Swift Testing | issued-cert binding checks (12) |
