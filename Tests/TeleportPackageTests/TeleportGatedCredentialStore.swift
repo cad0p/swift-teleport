@@ -79,9 +79,9 @@ final class GatedTeleportCredentialStore: TeleportCredentialStore {
     private(set) var storedLoginCertCount = 0
     /// The atomic pair-write count (T2's positive side).
     private(set) var storedPairCount = 0
-    /// Direct single-write invocation counts. The pair write also bumps the
-    /// legacy per-half counters above (so every existing probe stays
-    /// discriminating), so these are what T2's "0 singles" assertion reads.
+    /// Direct single-write invocation counts: the legacy counters above stay
+    /// populated for existing probes; pair-vs-single discrimination is what
+    /// these `singleStore*` counters are for.
     private(set) var singleStoreBootstrapCertCount = 0
     private(set) var singleStoreLoginCertCount = 0
     private(set) var singleStoreEd25519PrivateKeyCount = 0

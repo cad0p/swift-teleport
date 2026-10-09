@@ -338,7 +338,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
             // the cert's principals, so a foreign cert (a different keyID)
             // would authenticate as the wrong identity. Clear whatever the row
             // holds and fail closed.
-            guard cert.keyID == cluster.username else {
+            guard TeleportStoredCredentialBinding.isBound(cert: cert, username: cluster.username) else {
                 // No username in the log: identity values use the default
                 // (private) interpolation and never `.public`.
                 logger.error(
@@ -452,17 +452,23 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         cluster: TeleportCluster,
         failureMessage: String?
     ) async {
-        guard let snapshot = await keyRing.liveCredentialSnapshot(for: cluster.id),
-              let storedCert = OpenSSHCertificate.parse(authorizedKeysOrPEM: snapshot.certPEM) else {
+        let binding = TeleportStoredCredentialBinding.readBoundCert(
+            snapshot: await keyRing.liveCredentialSnapshot(for: cluster.id),
+            username: cluster.username
+        )
+        let storedCert: OpenSSHCertificate
+        switch binding {
+        case .bound(let cert, _):
+            storedCert = cert
+        case .unavailable:
             state = .failed(.unknown(failureMessage ?? "credentials could not be stored"))
             return
-        }
-        // The stored cert must belong to the configured Teleport user, exactly
-        // as the main path above requires: a stored cert for a foreign user
-        // (the row's username edited after storage) must not be handed off as
-        // a false "Signed in". Clear it and fail closed, mirroring the main
-        // path's post-clear re-take.
-        guard storedCert.keyID == cluster.username else {
+        case .foreignUser:
+            // The stored cert must belong to the configured Teleport user,
+            // exactly as the main path above requires: a stored cert for a
+            // foreign user (the row's username edited after storage) must not
+            // be handed off as a false "Signed in". Clear it and fail closed,
+            // mirroring the main path's post-clear re-take.
             // No username in the log: identity values use the default
             // (private) interpolation and never `.public`.
             logger.error(

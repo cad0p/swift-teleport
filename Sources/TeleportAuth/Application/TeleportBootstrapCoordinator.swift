@@ -484,7 +484,7 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
             // The certificate must belong to the Teleport user this row is
             // configured with (the cert's keyID is the Teleport identity).
             // Clear whatever the row holds and fail closed on a mismatch.
-            guard cert.keyID == cluster.username else {
+            guard TeleportStoredCredentialBinding.isBound(cert: cert, username: cluster.username) else {
                 // No username in the log: identity values use the default
                 // (private) interpolation and never `.public`.
                 logger.error(
@@ -574,6 +574,8 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
                 generation: generation,
                 cluster: cluster,
                 result: result,
+                // Unreachable under `.bootstrap` (every in-package conformer
+                // throws the typed error only under `.login`); kept for parity.
                 failureMessage: (error as? TeleportCredentialStoreError)?.errorDescription
             )
             return
@@ -626,21 +628,30 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         failureMessage: String?
     ) async {
         guard generation == requestGeneration else { return }
-        guard let snapshot = await keyRing.liveCredentialSnapshot(for: cluster.id),
-              let storedCert = OpenSSHCertificate.parse(authorizedKeysOrPEM: snapshot.certPEM) else {
-            // The snapshot read is an await too; a supersession during it must
-            // not write a stale failure over the newer state.
-            guard generation == requestGeneration else { return }
+        let binding = TeleportStoredCredentialBinding.readBoundCert(
+            snapshot: await keyRing.liveCredentialSnapshot(for: cluster.id),
+            username: cluster.username
+        )
+        // The snapshot read is an await too; a supersession during it must not
+        // write a stale failure over the newer state, and must not start a
+        // clear for a snapshot a newer attempt owns.
+        guard generation == requestGeneration else { return }
+        let storedCert: OpenSSHCertificate
+        let storedCertPEM: String
+        switch binding {
+        case .bound(let cert, let certPEM):
+            storedCert = cert
+            storedCertPEM = certPEM
+        case .unavailable:
             state = .failed(.unknown(failureMessage ?? "credentials could not be stored"))
             return
-        }
-        guard generation == requestGeneration else { return }   // the read is an await too
-        // The stored cert must belong to the configured Teleport user, exactly
-        // as the main path above requires: a stored cert for a foreign user
-        // (the row's username edited after storage) must not be handed off as
-        // a success. Clear it and fail closed, mirroring the main path's
-        // post-clear re-take. `lastBootstrapResult` stays nil.
-        guard storedCert.keyID == cluster.username else {
+        case .foreignUser:
+            // The stored cert must belong to the configured Teleport user,
+            // exactly as the main path above requires: a stored cert for a
+            // foreign user (the row's username edited after storage) must not
+            // be handed off as a success. Clear it and fail closed, mirroring
+            // the main path's post-clear re-take. `lastBootstrapResult` stays
+            // nil.
             // No username in the log: identity values use the default
             // (private) interpolation and never `.public`.
             logger.error(
@@ -654,7 +665,7 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
             return
         }
         let storedResult = BootstrapResult(
-            sshCertPEM: snapshot.certPEM,
+            sshCertPEM: storedCertPEM,
             tlsCertPEM: result.tlsCertPEM,
             tlsKeyPairPrivateKey: result.tlsKeyPairPrivateKey,
             clusterName: result.clusterName,
