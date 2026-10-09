@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.4] - 2026-10-09
+
+<!-- USER-EDITABLE SECTION START -->
+Login HTTP error structure (#40), matching the host issue
+[`cad0p/vvterm#236`](https://github.com/cad0p/vvterm/issues/236)
+(host fix PR [`#303`](https://github.com/cad0p/vvterm/pull/303)):
+
+- the login HTTP client throws the structured `HeadlessError.http(status:body:)`
+  for a non-200 `login/begin` / `login/finish` — no longer packing the status and
+  the body into one free-form `GRPCError.http2` string — and a body-free
+  `HeadlessError.decode` for the 200-empty-cert decode site, whose previous
+  `GRPCError.decode` message embedded a response-body snippet;
+- the coordinator maps the structured error to `.server("HTTP <status>: <body>")`
+  ("Teleport Server Error" with the server's message verbatim) and the log
+  carries `HTTP <status>` only — the status is no longer lost and the raw body
+  never reaches a `.public` log payload;
+- `TeleportErrorRedaction`'s header now names the gRPC/HTTP-2 layer as
+  `.http2`'s producer (an `NWError`/NIO pipeline message, not a packed body);
+- a new `TeleportLoginClientErrorShapeTests` suite (9 cases) drives the real
+  client over the loopback HTTP server, pins the coordinator mapping, and
+  tripwires the literal packing out of `Sources/` and the host-surface fixture.
+
+Patch release: no breaking public API change (no signature change;
+`TeleportTesting`'s `MockTeleportLoginCoordinator.Scenario` gains an additive,
+source-compatible `serverError(String)` case).
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Throw the structured HTTP error for login failures (closes #40)
+
+
 ## [0.3.3] - 2026-09-28
 
 <!-- USER-EDITABLE SECTION START -->
