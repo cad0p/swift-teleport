@@ -212,8 +212,10 @@ the Phase 2 host generally — can inject it without `package` access.
 public enum TeleportBootstrapState / TeleportBootstrapError { … }
 // `TeleportBootstrapState.dismissalRequiresTeardown` (public extension) is
 // true for the in-flight states (including `.failed(.safariUnavailable)`,
-// where the POST is still running) and false for `.success` and the terminal
-// `.failed` cases.
+// where the POST is still running) and false for `.success` and every
+// `.failed` case — the terminal ones and the mock-only `.failed(.suspended)`
+// (the real coordinator never produces it and no activation handler
+// re-issues the POST).
 
 @MainActor public protocol TeleportLoginCoordinating: AnyObject, ObservableObject { … latchDismissal() }
 @MainActor public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoordinating {

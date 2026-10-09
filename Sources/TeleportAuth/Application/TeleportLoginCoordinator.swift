@@ -269,6 +269,11 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
             beginResp = try await httpClient.loginBegin(baseURL: baseURL)
             // A `cancel()`/newer `begin()` during the request owns the state
             // now; this continuation must not use the response.
+            // Host parity, host-unpinned: no test in either suite supersedes
+            // while `loginBegin` is parked and then releases a success, so
+            // deleting this guard alone leaves the full suite green
+            // (measured); a refactor touching the continuation flow must
+            // re-derive it.
             guard generation == requestGeneration else { return }
         } catch {
             // The catch runs before any post-await guard, so the re-take must
@@ -535,6 +540,10 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
     /// the flow fails and the user can retry. `failureMessage` is the mapped
     /// store-failure text (`nil` for the generic message), so the typed
     /// concurrent-clear case is distinguishable from a keychain failure.
+    ///
+    /// The re-takes below (entry, post-read, post-clear) are the host's
+    /// post-#296 additions (`vvterm@fc7ab79d`), not part of the original
+    /// `eccec38f` generation port.
     private func finishWithStoreFailure(
         generation: Int,
         cluster: TeleportCluster,
@@ -570,7 +579,10 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
             await keyRing.clear(for: cluster.id)
             // The clear is already in flight when a supersession lands, so it
             // is allowed to commit (§1.4); only the terminal state is
-            // withheld.
+            // withheld. Host parity, host-unpinned: no test in either suite
+            // gates the helper's `clear` after the snapshot read, so deleting
+            // this guard alone leaves the full suite green (measured); a
+            // refactor touching the continuation flow must re-derive it.
             guard generation == requestGeneration else { return }
             state = .failed(.server("Certificate user binding check failed: the certificate does not belong to this Teleport user"))
             return

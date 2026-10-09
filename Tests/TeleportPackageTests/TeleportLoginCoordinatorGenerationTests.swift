@@ -11,10 +11,12 @@
 //  bump the view's `.onDisappear`/Cancel action performs before the async
 //  teardown is scheduled.
 //
-//  The tests are gate-driven and use no sleeps: the login HTTP calls and the
-//  keyring stores block on continuation gates, the coordinator state is
-//  changed out from under the parked continuation, and the gate is then
-//  released.
+//  The tests are gate-driven: the login HTTP calls and the keyring stores
+//  block on continuation gates, the coordinator state is changed out from
+//  under the parked continuation, and the gate is then released. The only
+//  timed waits are the bounded stray-probe polls (`waitForLoginBeginStarted`,
+//  a 5 ms poll bounded at 0.5 s) that turn a missing latch guard into an
+//  assertion instead of a parked task.
 //
 //  Guard coverage (so a mutation run is not misread): tests 1/2/3 cover the
 //  re-take after `loginFinish` (test 2 additionally covers that site's

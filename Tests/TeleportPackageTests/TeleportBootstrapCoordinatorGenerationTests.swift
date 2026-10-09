@@ -8,9 +8,11 @@
 //  by a newer `begin()`) must not overwrite the state a newer attempt owns.
 //
 //  The HTTP gate is a continuation-gated `TeleportHTTPClienting` stub, so the
-//  tests are deterministic and use no sleeps: the POST is held at the gate,
-//  the coordinator state is changed out from under it, and the gate is then
-//  released.
+//  tests are deterministic: the POST is held at the gate, the coordinator
+//  state is changed out from under it, and the gate is then released. The
+//  only timed waits are the bounded stray-probe polls (`waitForStarted` /
+//  `waitForLoginBeginStarted`, a 5 ms poll bounded at 0.5 s) that turn a
+//  missing latch guard into an assertion instead of a parked task.
 //
 //  Further tests gate the *keyring writes* instead, so `cancel()`/the
 //  dismissal latch can interleave between the POST release and the terminal
