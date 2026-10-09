@@ -185,7 +185,11 @@ public struct TeleportHTTPClient {
         let (data, status) = try await httpPOST(path: "/webapi/mfa/login/begin", body: beginBody)
         guard status == 200 else {
             let body = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw GRPCError.http2("login/begin HTTP \(status): \(body)")
+            // Structured status+body, matching the shared `HeadlessLogin.post`
+            // path: `wireFailure` renders the status and `mapHTTPError` maps
+            // the body to `.server`. The non-200 must not pack both into one
+            // free-form string (#40).
+            throw HeadlessError.http(status: status, body: body)
         }
         guard let resp = try? JSONDecoder().decode(LoginBeginResponse.self, from: data),
               let assertion = resp.webauthnChallenge else {
@@ -222,12 +226,14 @@ public struct TeleportHTTPClient {
         let (data, status) = try await httpPOST(path: "/webapi/mfa/login/finish", body: finishBody)
         guard status == 200 else {
             let body = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw GRPCError.http2("login/finish HTTP \(status): \(body)")
+            // Structured, same as `login/begin` above (#40).
+            throw HeadlessError.http(status: status, body: body)
         }
         guard let resp = try? JSONDecoder().decode(LoginFinishResponse.self, from: data),
               let cert = resp.cert, !cert.isEmpty else {
-            let body = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw GRPCError.decode("login/finish: no cert (body=\(body.prefix(256)))")
+            // Body-free: this decode message reaches the UI via `.unknown`, so
+            // it must not embed a server-supplied body snippet (#40).
+            throw HeadlessError.decode("login/finish: no cert")
         }
         return cert
     }

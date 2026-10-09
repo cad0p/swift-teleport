@@ -214,7 +214,7 @@ final class HostLiveTeleportHTTPClient: TeleportHTTPClienting {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             let responseBody = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw GRPCError.http2("login/begin HTTP \(status): \(responseBody)")
+            throw HeadlessError.http(status: status, body: responseBody)
         }
         do {
             return try JSONDecoder().decode(LoginBeginResponse.self, from: data)
@@ -245,7 +245,7 @@ final class HostLiveTeleportHTTPClient: TeleportHTTPClienting {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             let responseBody = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw GRPCError.http2("login/finish HTTP \(status): \(responseBody)")
+            throw HeadlessError.http(status: status, body: responseBody)
         }
         do {
             return try JSONDecoder().decode(LoginFinishResponse.self, from: data)
