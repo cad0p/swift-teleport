@@ -307,13 +307,19 @@ nonisolated final class TeleportLoginClientErrorShapeTests: XCTestCase {
     ///
     /// Known defeats (why this is a tripwire): an aliased factory
     /// (`let m = …; throw GRPCError.http2(m)`), a multi-line call (the quote
-    /// lands on the next line), a `typealias`, and exotic spellings such as
-    /// an extra parenthesis (`GRPCError.http2(("…")`). The behavioural tests
-    /// above are the primary evidence; this scan catches the direct
-    /// regression. Comment lines are skipped — a doc comment quoting the old
-    /// spelling must not satisfy the tripwire — and the coverage guards
-    /// assert the roots really contained the two known fix sites, so a wrong
-    /// path derivation fails loudly instead of passing vacuously.
+    /// lands on the next line), a `typealias`, whitespace spellings
+    /// (`GRPCError.http2 ("…")`, `GRPCError . http2("…")`), and exotic
+    /// spellings such as an extra parenthesis (`GRPCError.http2(("…")`). The
+    /// behavioural tests above are the primary evidence; this scan catches
+    /// the direct regression.
+    ///
+    /// Known false positives — the scan fails closed, so they only add reds
+    /// and can never hide a packing: a trailing `//` comment quoting the
+    /// spelling, an inline `/* … */` block, or a string literal containing
+    /// the needle. Comment lines are skipped (a doc comment quoting the old
+    /// spelling must not satisfy the tripwire) and the coverage guards assert
+    /// the roots really contained the two known fix sites, so a wrong path
+    /// derivation fails loudly instead of passing vacuously.
     @MainActor
     func testNoLiteralGRPCErrorHTTP2PackingRemainsInSources() throws {
         let needle = "GRPCError.http2(\""
