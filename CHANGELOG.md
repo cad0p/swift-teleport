@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [calver-released]
+
+<!-- USER-EDITABLE SECTION START -->
+<!-- Add your curated release notes here. -->
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Copy the gRPC body without the undeclared NIO conformance (closes #66)
+
+### 📚 Documentation
+
+- Refresh the README status and the PROVENANCE rows for v0.5.1 (closes #64)
+
+
 ## [0.5.1] - 2026-10-09
 
 <!-- USER-EDITABLE SECTION START -->
