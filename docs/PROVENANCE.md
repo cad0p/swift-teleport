@@ -36,6 +36,15 @@ tree:
   bootstrap log no longer publishes the Teleport username
   (`privacy: .private`), and `TeleportHostLoginFailure` renders payload-free
   under reflection (`CustomReflectable` + `CustomDebugStringConvertible`).
+- **v0.3.2** carries `0bf4e9d` — the #32 FQDN log redaction: the FQDN-bearing
+  log interpolations are `.private(mask: .hash)` instead of `.public`.
+- **v0.3.3** carries `1e4fe09` — the #36 pump-fd shutdown/close split: the
+  closer is one lock-serialized `open → shutDown → closed` machine, and
+  `runPump` joins both loops before releasing the descriptor.
+- **v0.3.4** carries `d455474` — the #40 login HTTP error structure: the login
+  client throws the structured `HeadlessError.http(status:body:)` (and a
+  body-free `HeadlessError.decode` at the 200-empty-cert site), so the log
+  carries `HTTP <status>` and the login state reaches `.server(message)`.
 
 The import preserves file content except for:
 
