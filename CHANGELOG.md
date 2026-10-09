@@ -2,10 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
-## [calver-released]
+## [0.5.2] - 2026-10-09
 
 <!-- USER-EDITABLE SECTION START -->
-<!-- Add your curated release notes here. -->
+**Patch release: internal code change; no public API change.**
+
+- `GRPCClient` copies the gRPC response body with `getBytes(at:length:)` instead of
+  `Data.append(contentsOf:)` over `readableBytesView`. The latter resolved to the
+  `Foundation.ContiguousBytes` overload, whose retroactive conformance lives in swift-nio's separate
+  `NIOFoundationEssentialsCompat` product (undeclared by the target) — the Xcode 27 dynamic-framework
+  link rejects it (`Undefined symbols … protocol conformance descriptor for NIOCore.ByteBufferView :
+  Foundation.ContiguousBytes in NIOFoundationEssentialsCompat`). Static links embed the descriptor,
+  which is why the package's own tests and the device Release arm were green (#66, host blocker
+  `cad0p/vvterm#425`).
+- A source pin (`TeleportNIOCoreLinkPinsTests`) refuses the `readableBytesView` / `ContiguousBytes`
+  spellings on non-comment lines in `Sources/`, with a documented defeat list; the faithful
+  class-level oracle remains the host's Xcode 27 dynamic-framework link.
+
+Also in this window: the v0.5.1 README/PROVENANCE refresh (#64).
+
+Test counts: 509 = 267 XCTest + 242 Swift Testing.
 <!-- USER-EDITABLE SECTION END -->
 
 ### 🐛 Bug Fixes
