@@ -111,6 +111,22 @@ struct OpenSSHCertificateTests {
         #expect(!cert.signatureBlob.isEmpty)
     }
 
+    /// The host-side agent forwarding offers `rawBlob` to the SSH agent and
+    /// matches a SIGN_REQUEST's key byte-for-byte against it (#268/#269), so
+    /// it must be the full decoded certificate blob — not the plain key and
+    /// not the signed prefix — and must round-trip through the parser.
+    @Test
+    func rawBlobRoundTripsAndReparsesToTheSameCertificate() throws {
+        let (_, decodedBlob) = try #require(OpenSSHCertificate.parseAuthorizedKeysLine(Self.userCert))
+        let cert = try #require(OpenSSHCertificate.parse(authorizedKeysOrPEM: Self.userCert))
+        #expect(cert.rawBlob == decodedBlob)
+        #expect(cert.rawBlob != cert.publicKeyBlob)
+        #expect(cert.rawBlob != cert.signedData)
+        // The blob alone is a valid parse input and round-trips to an equal
+        // value (Equatable compares every parsed field).
+        #expect(OpenSSHCertificate.parse(blob: cert.rawBlob) == cert)
+    }
+
     // MARK: - Expiry parser delegation
 
     @Test
