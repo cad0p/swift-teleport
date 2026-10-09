@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **428 tests** pass (221 XCTest + 207
+Expected: build clean (no warnings), **453 tests** pass (234 XCTest + 219
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds.
@@ -114,6 +114,15 @@ follow-up commits on the same branch; the PR description records the rounds.
   (`TeleportLoginClientErrorShapeTests`, including the `GRPCError.http2` packing
   tripwire) + `TeleportFrozenTextTests` green when a log site
   or an error text changes.
+- The atomic credential pair (#41) additionally runs
+  `TeleportLoginCoordinatorGenerationTests` (the login half: supersession
+  cannot tear, one pair/zero singles, the post-throw D4 states) and the
+  source pins `TeleportCredentialPairPinsTests` (one pair call per
+  coordinator; the keyring pair body non-async, key-first and suspend-free;
+  the adapter's one-hop `MainActor.run`; the real writer's
+  update-first/non-destructive `SecItem*` body). The keyring's new stored
+  property + designated init must keep its `nonisolated deinit {}`
+  (`TeleportSynchronousReleaseTests` traps at exit without it).
 - Host-login / credential-identity changes additionally run
   `TeleportHostLoginTests`, `TeleportCertBindingCoordinatorTests`,
   `TeleportIssuedCertValidatorTests`, `TeleportCredentialReuseMatcherTests`,

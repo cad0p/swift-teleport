@@ -20,7 +20,14 @@ public struct DefaultTeleportLogging: TeleportLogging {
     public nonisolated func logger(category: String) -> Logger
 }
 
-public protocol TeleportCredentialStore: Sendable { /* 13 async members */ }
+public protocol TeleportCredentialStore: Sendable { /* 14 async members */ }
+
+/// The atomic pair write's policy discriminator and its typed failure.
+public enum TeleportCredentialWritePolicy: Sendable { case bootstrap, login }
+public enum TeleportCredentialStoreError: Error, Equatable, LocalizedError {
+    case noRegisteredCredential(clusterId: UUID)
+    public var errorDescription: String?   // the concurrent-clear terminal message
+}
 
 @MainActor public protocol BrowserMFASessionHandle: AnyObject, Sendable { … }
 @MainActor public protocol BrowserMFAPresenting: Sendable { … }
@@ -230,6 +237,7 @@ public enum TeleportRegistrationState / TeleportRegistrationError { … }
     @Published public private(set) var credentials: [UUID: TeleportCredential]
     public func readiness(for:) -> TeleportDeviceReadiness
     public func liveCredentialSnapshot(for:) -> (certPEM: String, privateKeyPEM: Data)?
+    public func storeCredentialPair(_:validBefore:privateKeyPEM:policy:for:) throws
     public func isReusableRegistrationSource(for:clusterName:) -> Bool
     @discardableResult public func seedRegistration(from:to:) -> Bool
     // + the TeleportCredentialStore and TeleportCredentialInvalidating witnesses
