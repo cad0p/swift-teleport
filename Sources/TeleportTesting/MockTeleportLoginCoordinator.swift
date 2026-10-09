@@ -14,6 +14,8 @@
 //    - faceIDUnavailable(reason) → .failed(.faceIDUnavailable(msg)) → "Face ID
 //      isn't available. Set up Face ID in iOS Settings."
 //    - serverUnreachable → .failed(.networkLost) → "Couldn't reach Teleport."
+//    - serverError(message) → .failed(.server(message)) → "Teleport Server
+//      Error" with the server's message verbatim.
 //
 //  See:
 //    - 2026-07-23-strategy-b-session2.2-teleport-ui-design.md (mockup E —
@@ -54,6 +56,11 @@ public final class MockTeleportLoginCoordinator: ObservableObject, TeleportLogin
         /// The Teleport server was unreachable on /begin.
         /// → .failed(.networkLost) → "Couldn't reach Teleport. Tap to retry."
         case serverUnreachable
+        /// The server answered with an HTTP error on /begin or /finish (e.g. a
+        /// 403 from a device that must be re-registered).
+        /// → .failed(.server(message)) → "Teleport Server Error" with the
+        /// server's message verbatim.
+        case serverError(String)
     }
 
     /// The number of times `begin` was called.
@@ -106,6 +113,10 @@ public final class MockTeleportLoginCoordinator: ObservableObject, TeleportLogin
             state = .fetchingCert
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             state = .failed(.networkLost)
+        case .serverError(let message):
+            state = .fetchingCert
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            state = .failed(.server(message))
         }
     }
 

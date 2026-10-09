@@ -214,7 +214,7 @@ final class HostLiveTeleportHTTPClient: TeleportHTTPClienting {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             let responseBody = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw GRPCError.http2("login/begin HTTP \(status): \(responseBody)")
+            throw HeadlessError.http(status: status, body: responseBody)
         }
         do {
             return try JSONDecoder().decode(LoginBeginResponse.self, from: data)
@@ -245,7 +245,7 @@ final class HostLiveTeleportHTTPClient: TeleportHTTPClienting {
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
             let responseBody = String(data: data, encoding: .utf8) ?? "<binary>"
-            throw GRPCError.http2("login/finish HTTP \(status): \(responseBody)")
+            throw HeadlessError.http(status: status, body: responseBody)
         }
         do {
             return try JSONDecoder().decode(LoginFinishResponse.self, from: data)
@@ -868,6 +868,13 @@ enum HostHarnessMirror {
         let login = MockTeleportLoginCoordinator(scenario: .happyPath(certTTL: 3600, logins: ["deploy"]))
         _ = login.state
         _ = login.lastCertValidUntil
+        // The #40 additive case: constructing it here gates the public case
+        // against a `public` → `package` demotion or removal (the host's
+        // login UI test consumes it).
+        let loginServerError = MockTeleportLoginCoordinator(
+            scenario: .serverError("access denied: MFA device not registered")
+        )
+        _ = loginServerError.state
         let registration = MockTeleportRegistrationCoordinator(scenario: .happyPath)
         _ = registration.state
         _ = registration.lastDeviceName

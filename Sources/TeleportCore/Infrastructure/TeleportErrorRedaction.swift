@@ -9,12 +9,16 @@
 //  Invariant: a `.public` log payload may never be a value that came off the
 //  wire. `GRPCError.grpc(status:message:)` embeds the server's message (which
 //  can echo a redirect URL and its per-run `secret_key`),
-//  `GRPCError.http2` embeds the raw HTTP body, and
-//  `HeadlessError.http(status:body:)` embeds the raw response body. The
-//  renderings here keep the case — and the status where it is structurally
-//  available — and drop the payload. `.http2` keeps the case only: its
-//  message packs the status and the body into one free-form string, so the
-//  status cannot be recovered without parsing a payload-carrying string.
+//  `GRPCError.http2` carries the gRPC/HTTP-2 layer's failure message (an
+//  `NWError`/NIO pipeline description), and `HeadlessError.http(status:body:)` embeds the
+//  raw response body. The renderings here keep the case — and the status
+//  where it is structurally available — and drop the payload. `.http2` keeps
+//  the case only: its message is free-form, with no separate status field,
+//  and the login path that used to pack status+body into it now throws
+//  `HeadlessError.http`, whose status is structurally available (#40).
+//  A `GRPCError` also still reaches the renderer from the login client's
+//  begin-decode branch (`TeleportHTTPClient.swift:196`), not only from the
+//  gRPC/HTTP-2 layer.
 //
 //  Local errors (a gRPC *connect* failure, a `SignerError`, a WebAuthn
 //  builder error) keep their descriptive `localizedDescription`: case-only
@@ -33,8 +37,10 @@ import Foundation
 extension GRPCError {
     /// A redaction-safe rendering of a gRPC failure: the case (and status,
     /// where present) without the server's message, which can echo the
-    /// redirect URL and its per-run `secret_key`. `.http2` carries its status
-    /// inside the same free-form string as the body, so only the case survives.
+    /// redirect URL and its per-run `secret_key`. `.http2` is the
+    /// gRPC/HTTP-2 layer's free-form failure message, so only the case
+    /// survives; the login HTTP path throws `HeadlessError.http` instead,
+    /// whose status is structurally available (#40).
     package var redactedDescription: String {
         switch self {
         case .transport: return "transport"
@@ -62,12 +68,15 @@ package enum TeleportErrorRedaction {
 
     /// A wire-derived failure's shape at sites that can receive **either**
     /// error family. The login path's live client throws
-    /// `GRPCError.http2("<op> HTTP <status>: <body>")` — the raw body again —
-    /// while the bootstrap path's client wraps every failure in
-    /// `HeadlessError`. Both families are matched explicitly, so the
-    /// `localizedDescription` fallback is reached only by the genuinely local
-    /// errors those paths also produce (keychain, Safari, signer), whose text
-    /// carries the triage signal.
+    /// `HeadlessError.http(status:body:)` — the raw body — while the
+    /// bootstrap path's client wraps every failure in `HeadlessError` too.
+    /// A `GRPCError` still reaches this renderer from the gRPC/HTTP-2 layer
+    /// (`.http2` carries an `NWError`/NIO pipeline message, not a packed body) and from
+    /// the login client's begin-decode branch
+    /// (`TeleportHTTPClient.swift:196`). Both families are matched
+    /// explicitly, so the `localizedDescription` fallback is reached only by
+    /// the genuinely local errors those paths also produce (keychain, Safari,
+    /// signer), whose text carries the triage signal.
     package static func wireFailure(_ error: Error) -> String {
         if let grpc = error as? GRPCError {
             return grpc.redactedDescription
