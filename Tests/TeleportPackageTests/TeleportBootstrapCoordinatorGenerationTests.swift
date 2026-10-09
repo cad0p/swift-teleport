@@ -31,10 +31,12 @@ import XCTest
 @testable import TeleportAuth
 import TeleportTesting
 
-/// A `TeleportHTTPClienting` stub whose `headlessLogin` blocks on a per-call
-/// gate until the test releases it with a scripted result.
+/// A `TeleportHTTPClienting` stub whose `headlessLogin`/`loginBegin`/
+/// `loginFinish` calls block on a per-call gate until the test releases them
+/// with a scripted result. Shared by the bootstrap and login generation
+/// suites.
 @MainActor
-private final class GatedTeleportHTTPClient: TeleportHTTPClienting {
+final class GatedTeleportHTTPClient: TeleportHTTPClienting {
     /// The number of `headlessLogin` calls that have started.
     private(set) var startedCount = 0
     private var gates: [BootstrapGate] = []
@@ -90,10 +92,139 @@ private final class GatedTeleportHTTPClient: TeleportHTTPClienting {
         for waiter in ready { waiter.continuation.resume() }
     }
 
-    // Not exercised by the bootstrap coordinator.
+    // MARK: - Phase-3 login (the login coordinator's per-method gates)
+
+    /// The number of `loginBegin` calls that have started.
+    private(set) var loginBeginStartedCount = 0
+    /// The number of `loginFinish` calls that have started.
+    private(set) var loginFinishStartedCount = 0
+
+    /// Scripted Phase-3 responses, used by the no-result release forms
+    /// (`releaseLoginBegin(index:)` / `releaseLoginFinish(index:)`). Seeded
+    /// from the committed fixtures so a released call returns a cert the login
+    /// coordinator can actually validate.
+    var scriptedLoginBeginResponse: LoginBeginResponse? = MockTeleportHTTPClient.makeFixtureLoginBeginResponse()
+    var scriptedLoginFinishResponse: LoginFinishResponse? = TeleportFixtureSupport.makeFixtureLoginFinishResponse()
+
+    private var loginBeginGates: [BootstrapGate] = []
+    private var loginBeginResults: [Int: Result<LoginBeginResponse, Error>] = [:]
+    private var loginBeginStartWaiters: [(target: Int, continuation: CheckedContinuation<Void, Never>)] = []
+    private var loginFinishGates: [BootstrapGate] = []
+    private var loginFinishResults: [Int: Result<LoginFinishResponse, Error>] = [:]
+    private var loginFinishStartWaiters: [(target: Int, continuation: CheckedContinuation<Void, Never>)] = []
+
+    /// Suspends until at least `count` `loginBegin` calls have started.
+    func waitUntilLoginBeginStarted(_ count: Int) async {
+        guard loginBeginStartedCount < count else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            loginBeginStartWaiters.append((count, continuation))
+        }
+    }
+
+    /// Suspends until at least `count` `loginFinish` calls have started.
+    func waitUntilLoginFinishStarted(_ count: Int) async {
+        guard loginFinishStartedCount < count else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            loginFinishStartWaiters.append((count, continuation))
+        }
+    }
+
+    /// A bounded variant of `waitUntilLoginBeginStarted`: `true` when at least
+    /// `count` `loginBegin` calls started within `timeout` (see
+    /// `waitForStarted` for why the latch tests need the bound).
+    func waitForLoginBeginStarted(_ count: Int, timeout: TimeInterval) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if loginBeginStartedCount >= count { return true }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return loginBeginStartedCount >= count
+    }
+
+    /// Release the gate for the `index`-th `loginBegin` call with `result`.
+    func releaseLoginBegin(index: Int, with result: Result<LoginBeginResponse, Error>) async {
+        guard loginBeginGates.indices.contains(index) else {
+            XCTFail("releaseLoginBegin(index: \(index)) but only \(loginBeginGates.count) loginBegin call(s) started")
+            return
+        }
+        loginBeginResults[index] = result
+        await loginBeginGates[index].release()
+    }
+
+    /// Release the gate for the `index`-th `loginBegin` call with the scripted
+    /// response (or the committed fixture when none is scripted).
+    func releaseLoginBegin(index: Int) async {
+        await releaseLoginBegin(
+            index: index,
+            with: .success(scriptedLoginBeginResponse ?? MockTeleportHTTPClient.makeFixtureLoginBeginResponse())
+        )
+    }
+
+    /// Release the gate for the `index`-th `loginFinish` call with `result`.
+    func releaseLoginFinish(index: Int, with result: Result<LoginFinishResponse, Error>) async {
+        guard loginFinishGates.indices.contains(index) else {
+            XCTFail("releaseLoginFinish(index: \(index)) but only \(loginFinishGates.count) loginFinish call(s) started")
+            return
+        }
+        loginFinishResults[index] = result
+        await loginFinishGates[index].release()
+    }
+
+    /// Release the gate for the `index`-th `loginFinish` call with the scripted
+    /// response (or the committed fixture when none is scripted).
+    func releaseLoginFinish(index: Int) async {
+        await releaseLoginFinish(
+            index: index,
+            with: .success(scriptedLoginFinishResponse ?? TeleportFixtureSupport.makeFixtureLoginFinishResponse())
+        )
+    }
+
+    /// Release the `index`-th `loginBegin` gate only when that call has
+    /// started, with the scripted response (or the committed fixture). Unlike
+    /// `releaseLoginBegin(index:)` this never `XCTFail`s, so a drain path can
+    /// call it unconditionally.
+    func releaseLoginBeginIfStarted(index: Int) async {
+        await releaseLoginBeginIfStarted(
+            index: index,
+            with: .success(scriptedLoginBeginResponse ?? MockTeleportHTTPClient.makeFixtureLoginBeginResponse())
+        )
+    }
+
+    /// Release the `index`-th `loginBegin` gate only when that call has started.
+    func releaseLoginBeginIfStarted(index: Int, with result: Result<LoginBeginResponse, Error>) async {
+        guard loginBeginGates.indices.contains(index) else { return }
+        loginBeginResults[index] = result
+        await loginBeginGates[index].release()
+    }
+
+    /// Release the `index`-th `loginFinish` gate only when that call has
+    /// started, with the scripted response (or the committed fixture).
+    func releaseLoginFinishIfStarted(index: Int) async {
+        await releaseLoginFinishIfStarted(
+            index: index,
+            with: .success(scriptedLoginFinishResponse ?? TeleportFixtureSupport.makeFixtureLoginFinishResponse())
+        )
+    }
+
+    /// Release the `index`-th `loginFinish` gate only when that call has started.
+    func releaseLoginFinishIfStarted(index: Int, with result: Result<LoginFinishResponse, Error>) async {
+        guard loginFinishGates.indices.contains(index) else { return }
+        loginFinishResults[index] = result
+        await loginFinishGates[index].release()
+    }
 
     func loginBegin(baseURL: URL) async throws -> LoginBeginResponse {
-        throw HeadlessError.transport("loginBegin not scripted", code: nil)
+        let index = loginBeginStartedCount
+        let gate = BootstrapGate()
+        loginBeginGates.append(gate)
+        loginBeginStartedCount += 1
+        resumeLoginBeginStartWaiters()
+
+        await gate.wait()
+        guard let result = loginBeginResults.removeValue(forKey: index) else {
+            throw HeadlessError.transport("loginBegin not scripted", code: nil)
+        }
+        return try result.get()
     }
 
     func loginFinish(
@@ -102,7 +233,31 @@ private final class GatedTeleportHTTPClient: TeleportHTTPClienting {
         sshPubKey: Data,
         ttl: Int64
     ) async throws -> LoginFinishResponse {
-        throw HeadlessError.transport("loginFinish not scripted", code: nil)
+        let index = loginFinishStartedCount
+        let gate = BootstrapGate()
+        loginFinishGates.append(gate)
+        loginFinishStartedCount += 1
+        resumeLoginFinishStartWaiters()
+
+        await gate.wait()
+        guard let result = loginFinishResults.removeValue(forKey: index) else {
+            throw HeadlessError.transport("loginFinish not scripted", code: nil)
+        }
+        return try result.get()
+    }
+
+    private func resumeLoginBeginStartWaiters() {
+        guard !loginBeginStartWaiters.isEmpty else { return }
+        let ready = loginBeginStartWaiters.filter { $0.target <= loginBeginStartedCount }
+        loginBeginStartWaiters.removeAll { $0.target <= loginBeginStartedCount }
+        for waiter in ready { waiter.continuation.resume() }
+    }
+
+    private func resumeLoginFinishStartWaiters() {
+        guard !loginFinishStartWaiters.isEmpty else { return }
+        let ready = loginFinishStartWaiters.filter { $0.target <= loginFinishStartedCount }
+        loginFinishStartWaiters.removeAll { $0.target <= loginFinishStartedCount }
+        for waiter in ready { waiter.continuation.resume() }
     }
 }
 
