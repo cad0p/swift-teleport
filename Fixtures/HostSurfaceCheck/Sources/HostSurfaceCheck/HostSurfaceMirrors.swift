@@ -163,6 +163,26 @@ final class HostCredentialStoreAdapter: TeleportCredentialStore, @unchecked Send
         }
     }
 
+    /// The pair witness keeps the same one-hop contract as the singles: a
+    /// single synchronous `MainActor.run` body, no internal suspension.
+    func storeCredentialPair(
+        _ certPEM: String,
+        validBefore: Date,
+        privateKeyPEM: Data,
+        policy: TeleportCredentialWritePolicy,
+        for clusterId: UUID
+    ) async throws {
+        try await MainActor.run {
+            try keyRingProvider().storeCredentialPair(
+                certPEM,
+                validBefore: validBefore,
+                privateKeyPEM: privateKeyPEM,
+                policy: policy,
+                for: clusterId
+            )
+        }
+    }
+
     func storeClusterTLSState(_ state: TeleportClusterTLSState, for clusterId: UUID) async {
         await MainActor.run {
             keyRingProvider().storeClusterTLSState(state, for: clusterId)

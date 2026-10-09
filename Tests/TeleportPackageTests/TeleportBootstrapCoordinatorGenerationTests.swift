@@ -12,13 +12,16 @@
 //  the coordinator state is changed out from under it, and the gate is then
 //  released.
 //
-//  Three further tests gate the *keyring stores* instead, so `cancel()` can
+//  Further tests gate the *keyring writes* instead, so `cancel()` can
 //  interleave between the POST release and the terminal state write — the
 //  window the post-`await` re-take guards exist for (B1/S2). Without that
 //  interleaving the re-take guards would be unreachable: a generation bump
-//  before the handler is entered is caught by the entry guard. The three gate
-//  the first store (cert), the middle store (ed25519 private key) and the last
-//  store (cluster TLS state) respectively, one per re-take guard.
+//  before the handler is entered is caught by the entry guard. They gate the
+//  first credential write (the atomic pair write), the last store (cluster
+//  TLS state), and the D4 helper's `liveCredentialSnapshot` read. The D4
+//  section covers the helper's stored-cert user-binding gate, the
+//  `privKeyData == nil` branch (unreachable in production; driven through the
+//  injected encoder), and the helper's post-read supersession re-take.
 //
 
 import Combine
@@ -27,25 +30,6 @@ import XCTest
 @testable import TeleportCore
 @testable import TeleportAuth
 import TeleportTesting
-
-/// A per-call gate: `wait()` suspends until `release()` is called (or returns
-/// immediately if it was already released). An actor so it is safe to hold a
-/// `CheckedContinuation` across the HTTP client's isolation boundary.
-private actor BootstrapGate {
-    private var isReleased = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    func wait() async {
-        if isReleased { return }
-        await withCheckedContinuation { waiters.append($0) }
-    }
-
-    func release() {
-        isReleased = true
-        for waiter in waiters { waiter.resume() }
-        waiters.removeAll()
-    }
-}
 
 /// A `TeleportHTTPClienting` stub whose `headlessLogin` blocks on a per-call
 /// gate until the test releases it with a scripted result.
@@ -122,174 +106,6 @@ private final class GatedTeleportHTTPClient: TeleportHTTPClienting {
     }
 }
 
-/// A `TeleportCredentialStore` that gates the bootstrap-cert store (and,
-/// optionally, the final cluster-TLS store) on a continuation, so a test can
-/// interleave `cancel()` while the coordinator is suspended *inside* the
-/// persistence sequence. Reads and the ungated writes delegate to the
-/// underlying mock; writes are counted.
-@MainActor
-private final class GatedTeleportCredentialStore: TeleportCredentialStore {
-    private let underlying: MockTeleportKeyRing
-    private let certGate = BootstrapGate()
-    private let keyGate = BootstrapGate()
-    private let tlsGate = BootstrapGate()
-    private let gateTheFirstStore: Bool
-    private let gateTheMiddleStore: Bool
-    private let gateTheLastStore: Bool
-
-    private var certStoreStarted = false
-    private var certStoreWaiters: [CheckedContinuation<Void, Never>] = []
-    private var keyStoreStarted = false
-    private var keyStoreWaiters: [CheckedContinuation<Void, Never>] = []
-    private var tlsStoreStarted = false
-    private var tlsStoreWaiters: [CheckedContinuation<Void, Never>] = []
-
-    /// Committed write counts (incremented only after the gate is released).
-    private(set) var storedCertCount = 0
-    private(set) var storedPrivateKeyCount = 0
-    private(set) var storedTLSStateCount = 0
-
-    init(
-        underlying: MockTeleportKeyRing,
-        gateTheFirstStore: Bool = true,
-        gateTheMiddleStore: Bool = false,
-        gateTheLastStore: Bool = false
-    ) {
-        self.underlying = underlying
-        self.gateTheFirstStore = gateTheFirstStore
-        self.gateTheMiddleStore = gateTheMiddleStore
-        self.gateTheLastStore = gateTheLastStore
-    }
-
-    /// Suspends until the gated `storeBootstrapCert` has been entered.
-    func waitUntilCertStoreStarted() async {
-        guard !certStoreStarted else { return }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            certStoreWaiters.append(continuation)
-        }
-    }
-
-    /// Suspends until the gated `storeEd25519PrivateKey` has been entered.
-    func waitUntilPrivKeyStoreStarted() async {
-        guard !keyStoreStarted else { return }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            keyStoreWaiters.append(continuation)
-        }
-    }
-
-    /// Suspends until the gated `storeClusterTLSState` has been entered.
-    func waitUntilTLSStoreStarted() async {
-        guard !tlsStoreStarted else { return }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            tlsStoreWaiters.append(continuation)
-        }
-    }
-
-    func releaseCertStore() async {
-        await certGate.release()
-    }
-
-    func releasePrivKeyStore() async {
-        await keyGate.release()
-    }
-
-    func releaseTLSStore() async {
-        await tlsGate.release()
-    }
-
-    // MARK: - Reads (delegate)
-
-    func clusterTLSState(for clusterId: UUID) async -> TeleportClusterTLSState? {
-        underlying.clusterTLSState(for: clusterId)
-    }
-
-    func liveCertPEM(for clusterId: UUID) async -> String? {
-        underlying.liveCertPEM(for: clusterId)
-    }
-
-    func liveCredentialSnapshot(for clusterId: UUID) async -> (certPEM: String, privateKeyPEM: Data)? {
-        await underlying.liveCredentialSnapshot(for: clusterId)
-    }
-
-    func liveEd25519PrivateKey(for clusterId: UUID) async -> Data? {
-        underlying.liveEd25519PrivateKey(for: clusterId)
-    }
-
-    func registeredCredentialID(for clusterId: UUID) async -> Data? {
-        underlying.registeredCredentialID(for: clusterId)
-    }
-
-    func registeredUserHandle(for clusterId: UUID) async -> Data? {
-        underlying.registeredUserHandle(for: clusterId)
-    }
-
-    // MARK: - Writes
-
-    func storeBootstrapCert(_ certPEM: String, validBefore: Date, for clusterId: UUID) async {
-        if gateTheFirstStore {
-            certStoreStarted = true
-            let waiters = certStoreWaiters
-            certStoreWaiters.removeAll()
-            for waiter in waiters { waiter.resume() }
-            await certGate.wait()
-        }
-        storedCertCount += 1
-        underlying.storeBootstrapCert(certPEM, validBefore: validBefore, for: clusterId)
-    }
-
-    func storeRegisteredSEPKey(
-        credentialID: Data,
-        userHandle: Data,
-        publicKeyRaw: Data,
-        deviceName: String,
-        for clusterId: UUID
-    ) async {
-        underlying.storeRegisteredSEPKey(
-            credentialID: credentialID,
-            userHandle: userHandle,
-            publicKeyRaw: publicKeyRaw,
-            deviceName: deviceName,
-            for: clusterId
-        )
-    }
-
-    func storeLoginCert(_ certPEM: String, validBefore: Date, for clusterId: UUID) async {
-        underlying.storeLoginCert(certPEM, validBefore: validBefore, for: clusterId)
-    }
-
-    func storeEd25519PrivateKey(_ pemData: Data, for clusterId: UUID) async throws {
-        if gateTheMiddleStore {
-            keyStoreStarted = true
-            let waiters = keyStoreWaiters
-            keyStoreWaiters.removeAll()
-            for waiter in waiters { waiter.resume() }
-            await keyGate.wait()
-        }
-        storedPrivateKeyCount += 1
-        try underlying.storeEd25519PrivateKey(pemData, for: clusterId)
-    }
-
-    func storeClusterTLSState(_ state: TeleportClusterTLSState, for clusterId: UUID) async {
-        if gateTheLastStore {
-            tlsStoreStarted = true
-            let waiters = tlsStoreWaiters
-            tlsStoreWaiters.removeAll()
-            for waiter in waiters { waiter.resume() }
-            await tlsGate.wait()
-        }
-        storedTLSStateCount += 1
-        underlying.storeClusterTLSState(state, for: clusterId)
-    }
-
-    func updateClusterHostKeys(_ checkingKeys: [String], for clusterId: UUID) async -> TeleportHostKeyUpdateResult {
-        underlying.updateClusterHostKeys(checkingKeys, for: clusterId)
-    }
-
-    func clear(for clusterId: UUID) async {
-        underlying.clear(for: clusterId)
-    }
-}
-
 /// A `WebAuthenticationSessionPresenting` stub whose `open(url:)` blocks on a
 /// per-call gate, so a test can interleave a `cancel()`/newer `begin()` while
 /// the coordinator is suspended in the presenter await (S1).
@@ -346,7 +162,9 @@ nonisolated final class TeleportBootstrapCoordinatorGenerationTests: XCTestCase 
     private func makeCoordinator(
         http: any TeleportHTTPClienting,
         keyRing: any TeleportCredentialStore,
-        presenter: (any WebAuthenticationSessionPresenting)? = nil
+        presenter: (any WebAuthenticationSessionPresenting)? = nil,
+        sshKeyPairGenerator: (any TeleportSSHKeyPairGenerating)? = nil,
+        privateKeyDataEncoder: ((String) -> Data?)? = nil
     ) -> TeleportBootstrapCoordinator {
         TeleportBootstrapCoordinator(
             httpClient: http,
@@ -354,9 +172,10 @@ nonisolated final class TeleportBootstrapCoordinatorGenerationTests: XCTestCase 
             safariPresenter: presenter ?? MockWebAuthenticationSessionPresenter(),
             logging: DefaultTeleportLogging(),
             signer: MockSEPKeySigner(outcome: .success),
-            sshKeyPairGenerator: TeleportFixtureSupport.makeFixedSSHGenerator(),
+            sshKeyPairGenerator: sshKeyPairGenerator ?? TeleportFixtureSupport.makeFixedSSHGenerator(),
             tlsKeyPairGenerator: try! TeleportFixtureSupport.makeFixedTLSGenerator(),
-            now: { TeleportFixtureSupport.fixtureClock }
+            now: { TeleportFixtureSupport.fixtureClock },
+            privateKeyDataEncoder: privateKeyDataEncoder ?? { $0.data(using: .utf8) }
         )
     }
 
@@ -533,12 +352,14 @@ nonisolated final class TeleportBootstrapCoordinatorGenerationTests: XCTestCase 
     }
 
     /// Interleave `cancel()` while the coordinator is suspended *inside* the
-    /// first keyring store. The re-take after that store must stop the later
-    /// credential writes (the ed25519 private key and the pinned cluster TLS
-    /// state) so a superseded success persists no secret material, and the
-    /// terminal state/result must not be committed.
+    /// atomic pair write. The pair write was already in flight when the cancel
+    /// landed, so it is allowed to land **complete** (§1.4) — the credential
+    /// can never be torn. The later cluster-TLS write, the in-memory result
+    /// and the terminal state must all be withheld. The explicit TLS
+    /// assertions are the deleted middle-store test's coverage: they pin the
+    /// post-credential re-take guard.
     @MainActor
-    func testCancelledRequestDuringFirstKeyringStoreStopsLaterCredentialWrites() async {
+    func testCancelledRequestDuringFirstKeyringStoreLetsTheInFlightPairLand() async {
         let keyRing = MockTeleportKeyRing()
         let store = GatedTeleportCredentialStore(underlying: keyRing)
         let http = GatedTeleportHTTPClient()
@@ -552,69 +373,20 @@ nonisolated final class TeleportBootstrapCoordinatorGenerationTests: XCTestCase 
             index: 0,
             with: .success(TeleportFixtureSupport.makeFixtureSuccessResponse())
         )
-        await store.waitUntilCertStoreStarted()
+        await store.waitUntilFirstCredentialWriteStarted()
 
         await coordinator.cancel()
         XCTAssertEqual(coordinator.state, .failed(.userCancelled))
 
-        await store.releaseCertStore()
+        await store.releaseFirstCredentialWrite()
         await beginTask.value
 
         XCTAssertEqual(coordinator.state, .failed(.userCancelled))
         XCTAssertNil(coordinator.lastBootstrapResult)
-        XCTAssertEqual(store.storedPrivateKeyCount, 0)
-        XCTAssertEqual(store.storedTLSStateCount, 0)
-        XCTAssertNil(keyRing.liveEd25519PrivateKey(for: cluster.id))
-        XCTAssertNil(keyRing.clusterTLSState(for: cluster.id))
-    }
-
-    /// Interleave `cancel()` while the coordinator is suspended *inside* the
-    /// middle keyring store (the ed25519 private key). This is the one re-take
-    /// guard the first/last store tests cannot reach: the cert store has
-    /// already committed, and the re-take after the key store is the only
-    /// thing that stops the later cluster-TLS write. The cert and the key are
-    /// authentic and already in flight when the cancel lands, so they are
-    /// allowed to commit; the TLS state, the terminal state and the in-memory
-    /// result must all be withheld.
-    ///
-    /// Counterfactual (measured): deleting the re-take immediately after
-    /// `storeEd25519PrivateKey` makes this test fail with
-    /// `storedTLSStateCount == 1` and a non-nil `clusterTLSState`.
-    @MainActor
-    func testCancelledRequestDuringPrivateKeyStoreStopsLaterCredentialWrites() async {
-        let keyRing = MockTeleportKeyRing()
-        let store = GatedTeleportCredentialStore(
-            underlying: keyRing,
-            gateTheFirstStore: false,
-            gateTheMiddleStore: true
-        )
-        let http = GatedTeleportHTTPClient()
-        let coordinator = makeCoordinator(http: http, keyRing: store)
-        let cluster = makeCluster()
-
-        let beginTask = Task { await coordinator.begin(cluster: cluster) }
-        await http.waitUntilStarted(1)
-
-        await http.release(
-            index: 0,
-            with: .success(TeleportFixtureSupport.makeFixtureSuccessResponse())
-        )
-        await store.waitUntilPrivKeyStoreStarted()
-
-        // The cert store has already committed by the time the key store is
-        // entered; the coordinator is now suspended inside the key store.
-        XCTAssertEqual(store.storedCertCount, 1)
+        XCTAssertEqual(store.storedPairCount, 1, "the in-flight pair write is allowed to land complete")
+        XCTAssertEqual(store.storedPrivateKeyCount, 1)
         XCTAssertNotNil(keyRing.liveCertPEM(for: cluster.id))
-        XCTAssertNil(keyRing.liveEd25519PrivateKey(for: cluster.id))
-
-        await coordinator.cancel()
-        XCTAssertEqual(coordinator.state, .failed(.userCancelled))
-
-        await store.releasePrivKeyStore()
-        await beginTask.value
-
-        XCTAssertEqual(coordinator.state, .failed(.userCancelled))
-        XCTAssertNil(coordinator.lastBootstrapResult)
+        XCTAssertNotNil(keyRing.liveEd25519PrivateKey(for: cluster.id))
         XCTAssertEqual(store.storedTLSStateCount, 0)
         XCTAssertNil(keyRing.clusterTLSState(for: cluster.id))
     }
