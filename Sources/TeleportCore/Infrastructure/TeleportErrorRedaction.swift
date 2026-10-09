@@ -10,14 +10,14 @@
 //  wire. `GRPCError.grpc(status:message:)` embeds the server's message (which
 //  can echo a redirect URL and its per-run `secret_key`),
 //  `GRPCError.http2` carries the gRPC/HTTP-2 layer's failure message (an
-//  `NWError` description), and `HeadlessError.http(status:body:)` embeds the
+//  `NWError`/NIO pipeline description), and `HeadlessError.http(status:body:)` embeds the
 //  raw response body. The renderings here keep the case — and the status
 //  where it is structurally available — and drop the payload. `.http2` keeps
 //  the case only: its message is free-form, with no separate status field,
 //  and the login path that used to pack status+body into it now throws
 //  `HeadlessError.http`, whose status is structurally available (#40).
 //  A `GRPCError` also still reaches the renderer from the login client's
-//  begin-decode branch (`TeleportHTTPClient.swift:192`), not only from the
+//  begin-decode branch (`TeleportHTTPClient.swift:196`), not only from the
 //  gRPC/HTTP-2 layer.
 //
 //  Local errors (a gRPC *connect* failure, a `SignerError`, a WebAuthn
@@ -73,7 +73,7 @@ package enum TeleportErrorRedaction {
     /// A `GRPCError` still reaches this renderer from the gRPC/HTTP-2 layer
     /// (`.http2` carries an `NWError` message, not a packed body) and from
     /// the login client's begin-decode branch
-    /// (`TeleportHTTPClient.swift:192`). Both families are matched
+    /// (`TeleportHTTPClient.swift:196`). Both families are matched
     /// explicitly, so the `localizedDescription` fallback is reached only by
     /// the genuinely local errors those paths also produce (keychain, Safari,
     /// signer), whose text carries the triage signal.

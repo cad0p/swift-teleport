@@ -190,6 +190,12 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         do {
             beginResp = try await httpClient.loginBegin(baseURL: baseURL)
         } catch {
+            // A wire-derived failure can carry the raw server body —
+            // `HeadlessError.http(status:body:)` is what the login client
+            // throws for a non-200 call (#40); a `GRPCError` from the
+            // gRPC/HTTP-2 layer (or the begin-decode branch) still reaches
+            // this catch. Log the case/status only. The descriptive text
+            // stays in the UI state via `mapHTTPError`.
             logger.error("login/begin failed: \(TeleportErrorRedaction.wireFailure(error), privacy: .public)")
             state = .failed(mapHTTPError(error))
             return
@@ -274,6 +280,8 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
                 ttl: ttl
             )
         } catch {
+            // Same class as `login/begin` above: a wire-derived failure whose
+            // log payload carries the case/status only, never the raw body.
             logger.error("login/finish failed: \(TeleportErrorRedaction.wireFailure(error), privacy: .public)")
             state = .failed(mapHTTPError(error))
             return
