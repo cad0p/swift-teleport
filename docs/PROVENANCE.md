@@ -67,7 +67,7 @@ tree:
   protocols with no protocol-extension default (source-breaking for out-of-package conformers), a
   `private(set) isDismissalLatched` flag that makes `begin()` / bootstrap `retry()` terminal, and the
   public exhaustive `dismissalRequiresTeardown` maps (host `4253f48e`, #272, host fix PR #278).
-- **v0.5.1** carries the post-v0.5.0 host deltas so the vvterm #371 Phase-2
+- **v0.5.1** carries `f2dd9df` — the post-v0.5.0 host deltas so the vvterm #371 Phase-2
   cutover cannot regress: `24e27af5` (#267 — `retry()` re-runs `begin`, plus
   the `MockWebAuthenticationSessionPresenter` helpers), `da56b322` +
   `642117ee` (#401/#405 — the `BrowserMFAListening` protocol + the
@@ -253,6 +253,10 @@ byte-reproducible against the committed `.pb.swift`.
   `TeleportKeyRingHost`, `TeleportKeyRingCredentialStore`,
   `TeleportKeyRingStoring`, `TeleportErrorMapping`,
   `TeleportKeychainConfig+App`).
+- The agent-forwarding surface (`TeleportAgentForwarding.swift`:
+  `TeleportAgentIdentity`, the callback registry, the channel store) — the
+  package exposes only the `sshString` wire builder; the forwarding itself
+  stays host-side (v0.5.1).
 - `UI/*` (the SwiftUI surfaces + `TeleportLiveCoordinators`), the iOS UI-test
   harnesses, and the remaining host-side AGPL files
   (`TeleportLiveCoordinators.swift`, `scripts/ci/teleport-webauthn.py`, the 4
