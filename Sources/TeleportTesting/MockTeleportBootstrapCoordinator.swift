@@ -73,6 +73,11 @@ public final class MockTeleportBootstrapCoordinator: ObservableObject, TeleportB
     /// (e.g. the suspended scenario succeeds on the second call).
     public private(set) var beginCallCount = 0
 
+    /// Monotonic `begin` invocation counter. A parked invocation whose
+    /// generation is stale (a later `begin` superseded it) returns without
+    /// writing state, so it can never clobber the newer invocation.
+    private var beginGeneration = 0
+
     /// The number of times `cancel` was called.
     public private(set) var cancelCallCount = 0
 
@@ -94,14 +99,51 @@ public final class MockTeleportBootstrapCoordinator: ObservableObject, TeleportB
     private let scenario: Scenario
     private let delay: TimeInterval
 
-    public init(scenario: Scenario, delay: TimeInterval = 0.05) {
+    /// When true, `begin` parks in `.awaitingApproval` after its normal
+    /// delay and waits for `releaseApproval()` — the phase-chain UI test's
+    /// deterministic hold. The hold is one-shot per release: it applies to
+    /// the first `begin` after construction, and a hold released by
+    /// `releaseApproval()` or by `cancel()` does not re-engage on a later
+    /// `begin` (a hold that self-released on the 30 s deadline leaves
+    /// `approvalReleased == false`, so a later `begin` does re-engage it).
+    /// A parked invocation superseded by a later `begin` returns without
+    /// writing state. Default false: sequential usage (one `begin` at a
+    /// time) is behaviour-identical to before; a superseded non-gated
+    /// invocation now returns without writing state instead of clobbering
+    /// the newer one (issue #277).
+    private let holdsForApproval: Bool
+
+    /// Set by `releaseApproval()` (or by `cancel()` while held). Idempotent.
+    private var approvalReleased = false
+
+    /// Set by `cancel()` while the held `begin` is parked, so the park loop
+    /// cannot fall through into the scenario switch after a cancellation.
+    private var cancelledWhileHeld = false
+
+    public init(scenario: Scenario, delay: TimeInterval = 0.05, holdsForApproval: Bool = false) {
         self.scenario = scenario
         self.delay = delay
+        self.holdsForApproval = holdsForApproval
+    }
+
+    /// Releases a `holdsForApproval` hold. Returns true iff the hold was
+    /// armed and not yet released; the second call returns false
+    /// (idempotent). Non-gated instances always return false.
+    @discardableResult
+    public func releaseApproval() -> Bool {
+        let wasHeld = holdsForApproval && !approvalReleased
+        approvalReleased = true
+        return wasHeld
     }
 
     public func begin(cluster: TeleportCluster) async {
         beginCallCount += 1
+        beginGeneration += 1
+        let generation = beginGeneration
         lastCluster = cluster
+        // Per-invocation lifecycle: a previous hold's cancellation flag must
+        // never swallow a later begin()/retry() (issue #277).
+        cancelledWhileHeld = false
         state = .preparing
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
 
@@ -115,6 +157,28 @@ public final class MockTeleportBootstrapCoordinator: ObservableObject, TeleportB
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
         state = .awaitingApproval
         try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+
+        // The phase-chain UI test's deterministic hold: park in
+        // `.awaitingApproval` until the harness's release control is tapped.
+        // 50 ms poll cadence; the 30 s self-release bounds a lost tap far
+        // below the 300 s per-test execution allowance. Task cancellation
+        // exits the park.
+        if holdsForApproval && !approvalReleased {
+            let deadline = Date().addingTimeInterval(30)
+            while !approvalReleased && !Task.isCancelled && Date() < deadline {
+                try? await Task.sleep(nanoseconds: 50_000_000)
+            }
+        }
+        // A parked invocation superseded by a later `begin` (e.g. retry)
+        // must not write state over the newer invocation. This is checked
+        // before the cancellation guard/switch (issue #277).
+        guard generation == beginGeneration else { return }
+        // Scoped to the gated path: a cancelled non-gated instance still
+        // falls through to its scenario switch exactly as before. The
+        // generation guard above is unconditional, so a superseded non-gated
+        // invocation returns without writing state instead of clobbering the
+        // newer one.
+        if holdsForApproval && (cancelledWhileHeld || Task.isCancelled) { return }
 
         switch scenario {
         case .happyPath, .alreadyLoggedIn:
@@ -143,6 +207,13 @@ public final class MockTeleportBootstrapCoordinator: ObservableObject, TeleportB
 
     public func cancel() async {
         cancelCallCount += 1
+        if holdsForApproval {
+            // A cancel during the hold must stop the parked begin from
+            // falling through into the scenario switch. Non-gated instances
+            // stay bit-identical: these flags are never touched there.
+            cancelledWhileHeld = true
+            approvalReleased = true
+        }
         state = .failed(.userCancelled)
     }
 
@@ -153,16 +224,14 @@ public final class MockTeleportBootstrapCoordinator: ObservableObject, TeleportB
     public func retry() async {
         retryCallCount += 1
         state = .idle
-        // The view's retry button calls retry() but does not re-invoke begin().
-        // The real coordinator's retry() relies on the caller re-invoking
-        // begin() (the sheet holds the cluster). For the suspended scenario,
-        // the second begin() is supposed to succeed — re-trigger it here so
-        // the XCUITest can assert the recovery UX end-to-end (retry → success).
-        // Other scenarios stay at .idle after retry (the tests for those don't
-        // assert a post-retry state transition).
-        if scenario == .suspended, let cluster = lastCluster {
-            await begin(cluster: cluster)
-        }
+        // Mirrors the real coordinator's contract: `retry()` resets to
+        // `.idle` and then re-invokes `begin(cluster:)` with the cluster of
+        // the last `begin` call (the view only calls `retry()`). The
+        // suspended scenario succeeds on the second call, so the XCUITest can
+        // assert the recovery UX end-to-end (retry → success); the other
+        // scenarios re-run and land back on their scripted failure.
+        guard let cluster = lastCluster else { return }
+        await begin(cluster: cluster)
     }
 
     /// Build a minimal `BootstrapResult` for the success scenarios. The

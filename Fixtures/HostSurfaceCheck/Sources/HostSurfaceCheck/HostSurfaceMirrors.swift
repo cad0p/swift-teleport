@@ -502,6 +502,22 @@ enum HostCompositionMirror {
     ) -> BrowserMFACeremony {
         BrowserMFACeremony(logging: logging, presenter: presenter)
     }
+
+    /// The #401/#405 listener seam as the host's kept
+    /// `BrowserMFAListening`-adjacent call sites consume it: the init's
+    /// `makeListener` parameter is `(Logger) -> any BrowserMFAListening`, and
+    /// the production listener is publicly constructible (the ceremony's
+    /// `public init` default cannot name an internal type).
+    static func makeBrowserMFACeremonyWithListener(
+        logging: any TeleportLogging,
+        presenter: any BrowserMFAPresenting
+    ) -> BrowserMFACeremony {
+        BrowserMFACeremony(
+            logging: logging,
+            presenter: presenter,
+            makeListener: { BrowserMFAListener(logger: $0) }
+        )
+    }
 }
 
 // MARK: - Mirror: host `SSHClient` host-key verification + model surface
@@ -818,6 +834,21 @@ enum HostD6SeamMirror {
         OpenSSHCertificate.parseAuthorizedKeysLine(line)?.blob
     }
 
+    /// The host-side agent forwarding offers `certificate.rawBlob` to the
+    /// SSH agent and matches a SIGN_REQUEST against it byte-for-byte
+    /// (#268/#269); the host's fixture rebuild also builds synthetic
+    /// certificates with the package's single public wire encoder
+    /// (`sshString`, 13 call sites).
+    static func openSSHCertificateAgentSurface(certificateLine: String) {
+        if let certificate = OpenSSHCertificate.parse(authorizedKeysOrPEM: certificateLine) {
+            _ = certificate.rawBlob
+            // Re-parse the exposed blob — the round-trip contract the tests
+            // assert in-package.
+            _ = OpenSSHCertificate.parse(blob: certificate.rawBlob)
+        }
+        _ = OpenSSHCertificate.sshString(Data([0x01, 0x02]))
+    }
+
     /// The kept host suite `TeleportHostKeyPersistenceTests` reads the
     /// `login/finish` host-signer fields when it refreshes the pinned Host CA
     /// keys (additions-only).
@@ -912,6 +943,32 @@ enum HostHarnessMirror {
         let registration = MockTeleportRegistrationCoordinator(scenario: .happyPath)
         _ = registration.state
         _ = registration.lastDeviceName
+    }
+
+    /// The #267 mock Safari helper surface the host's bootstrap/retry wiring
+    /// tests drive: `liveSessionCount` is the leak signal (the mock does not
+    /// cancel-before-replace) and `waitUntilOpenStarted(_:timeout:)` is the
+    /// bounded interleave.
+    static func mockSafariHelpers() async {
+        let safari = MockWebAuthenticationSessionPresenter()
+        guard let url = URL(string: "https://teleport.example.com/web/headless/x") else { return }
+        _ = await safari.open(url: url)
+        _ = safari.liveSessionCount
+        _ = await safari.waitUntilOpenStarted(1, timeout: 0.1)
+        safari.cancel()
+    }
+
+    /// The #277 gate seam and the #267 retry re-`begin` contract: the kept
+    /// host phase-chain harness constructs the mock with
+    /// `holdsForApproval: true` and taps `releaseApproval()`, and the host
+    /// bootstrap view only calls `retry()` (which re-runs `begin`).
+    static func mockBootstrapGateAndRetry() async {
+        let mock = MockTeleportBootstrapCoordinator(scenario: .happyPath, holdsForApproval: true)
+        let coordinating: any TeleportBootstrapCoordinating = mock
+        await coordinating.retry()
+        _ = mock.releaseApproval()
+        _ = mock.beginCallCount
+        _ = mock.retryCallCount
     }
 
     /// The host's login sheet switches over every `TeleportLoginState` case;

@@ -48,6 +48,12 @@ public struct OpenSSHCertificate: Equatable, Sendable {
         case host = 2
     }
 
+    /// The full decoded certificate blob (the `AAAA…` payload of the
+    /// authorized_keys line). This is the identity an SSH agent must offer
+    /// and the blob a SIGN_REQUEST must match byte-for-byte — neither
+    /// `publicKeyBlob` (the plain key) nor `signedData` (the CA-signed
+    /// prefix) is a substitute.
+    public let rawBlob: Data
     /// The full certificate key type, e.g.
     /// `ssh-ed25519-cert-v01@openssh.com`.
     public let certKeyType: String
@@ -234,6 +240,7 @@ public struct OpenSSHCertificate: Equatable, Sendable {
         guard reader.remaining == 0 else { return nil }
 
         return OpenSSHCertificate(
+            rawBlob: blob,
             certKeyType: certKeyType,
             nonce: nonce,
             publicKeyBlob: publicKeyBlob,
@@ -253,7 +260,7 @@ public struct OpenSSHCertificate: Equatable, Sendable {
     }
 
     /// SSH wire helper: `uint32_be(length) || payload`.
-    static func sshString(_ data: Data) -> Data {
+    public static func sshString(_ data: Data) -> Data {
         var out = Data()
         let length = UInt32(data.count)
         out.append(UInt8((length >> 24) & 0xFF))

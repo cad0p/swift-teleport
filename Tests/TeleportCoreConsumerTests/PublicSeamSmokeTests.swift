@@ -90,4 +90,17 @@ struct PublicSeamSmokeTests {
         )
         #expect(TeleportTLSTrust.anchors(fromPEMs: []).isEmpty)
     }
+
+    @Test
+    func sshStringIsAPublicWireBuilder() {
+        // The host fixture rebuild builds synthetic certificates with the
+        // package's single wire encoder (13 call sites in the host's
+        // `TeleportFixtureSupport`), so `sshString` must stay public in a
+        // non-`@testable` consumer.
+        #expect(OpenSSHCertificate.sshString(Data()) == Data([0, 0, 0, 0]))
+        #expect(
+            OpenSSHCertificate.sshString(Data("abc".utf8))
+                == Data([0, 0, 0, 3]) + Data("abc".utf8)
+        )
+    }
 }

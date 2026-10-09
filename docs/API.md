@@ -33,6 +33,27 @@ public enum TeleportCredentialStoreError: Error, Equatable, LocalizedError {
 @MainActor public protocol BrowserMFAPresenting: Sendable { … }
 public protocol WebAuthenticationSessionPresenting: AnyObject { … }
 
+/// The Browser MFA ceremony's loopback-listener seam (host `da56b322`, #401).
+/// `nonisolated` is load-bearing: the targets set
+/// `.defaultIsolation(MainActor.self)`, so an unmarked protocol would be
+/// MainActor-isolated and the nonisolated production conformer could not
+/// satisfy it.
+///
+/// Public — with `BrowserMFAListener(logger:)` — because the ceremony's
+/// defaulted `makeListener` names the production conformer: a public default
+/// argument cannot reference an internal type or its internal initializer.
+/// A public static factory could have kept the protocol and listener internal,
+/// but would have broken the host's inline-default shape; the public surface
+/// is the ported shape.
+nonisolated public protocol BrowserMFAListening: AnyObject, Sendable {
+    func start() async throws -> String
+    func waitForResponse() async throws -> Proto_CredentialAssertionResponse
+    func cancel()
+}
+public nonisolated final class BrowserMFAListener: NSObject, BrowserMFAListening, @unchecked Sendable {
+    public convenience init(logger: Logger = …)   // the production factory; the timeout/NWListener seams stay internal
+}
+
 public protocol TeleportSessionMutex: Sendable { … }
 public protocol TeleportChannelTransport: Sendable { … }
 public protocol TeleportChannelTransportFactory: Sendable { … }
@@ -98,7 +119,11 @@ public struct GRPCClientIdentity {
 
 ```swift
 public enum HostKeyTrustPolicy { public enum Decision { … }; public static func decide(…) -> Decision }
-public struct OpenSSHCertificate { public enum CertType; /* public fields */; public static func parse(…) }
+public struct OpenSSHCertificate {
+    public enum CertType; /* public fields */; public let rawBlob: Data
+    public static func parse(…)
+    public static func sshString(_:) -> Data   // the uint32_be length-prefix wire encoder
+}
 public enum OpenSSHHostCertVerifier { public static func verify(…) -> OpenSSHHostCertVerification }
 public struct TeleportCluster { public init(…); public var sepKeyLabel }
 public struct TeleportCredential { public init(…); public var isCertValid }
@@ -163,7 +188,11 @@ public struct CredentialCreationResponse; public struct CredentialAssertionRespo
 public final class SecureEnclaveSigner: WebAuthnSigner, SEPKeySigning { … }
 
 @MainActor public final class BrowserMFACeremony: NSObject {
-    public init(logging: any TeleportLogging, presenter: any BrowserMFAPresenting)
+    public init(
+        logging: any TeleportLogging,
+        presenter: any BrowserMFAPresenting,
+        makeListener: @escaping (Logger) -> any BrowserMFAListening = { BrowserMFAListener(logger: $0) }
+    )
     public func run(grpcClient: any TeleportGRPCClienting, host: String) async throws -> Proto_BrowserMFAResponse
 }
 public enum BrowserMFACeremonyError: Error, LocalizedError { public var errorDescription: String? }
@@ -268,7 +297,12 @@ The 7 public mocks, UI-free and app-type-free: `MockSEPKeySigner` (`.success`,
 `MockTeleportKeyRing` (+ `Fixture`), `MockTeleportBootstrapCoordinator`
 (+ `Scenario`), `MockTeleportLoginCoordinator` (+ `Scenario`),
 `MockTeleportRegistrationCoordinator` (+ `Scenario`),
-`MockWebAuthenticationSessionPresenter`.
+`MockWebAuthenticationSessionPresenter` (+ the #267 `liveSessionCount` and
+bounded `waitUntilOpenStarted(_:timeout:)` helpers).
+`MockTeleportBootstrapCoordinator` also carries the #277 gate seam:
+`init(scenario:delay:holdsForApproval:)` + `releaseApproval()`, default off;
+the held `begin` parks in `.awaitingApproval` until released, cancelled, or
+the 30 s self-release.
 
 Plus `SoftwareSigner`: the software P-256 signer (`public final class
 SoftwareSigner: WebAuthnSigner, SEPKeySigning, TeleportSEPSigning`) that makes
@@ -292,8 +326,9 @@ path-depends on this one; its `HostSurfaceMirrors` compile the host's
 `TeleportKeyRingCredentialStore`, `SSHClient` host-key verification + host-login
 resolver, the login-view setup picker, `ServerManager` credential invalidation,
 the `Server`/`TeleportKeyRing+Reuse` reuse orchestration, and one iOS harness
-against the public surface only. A missing promotion fails that build instead
-of Phase 2.
+against the public surface only (extended for the v0.5.1 additions:
+`rawBlob`/`sshString`, the `makeListener` seam, the mock Safari helpers and
+the bootstrap gate). A missing promotion fails that build instead of Phase 2.
 
 The in-package `Tests/TeleportCoreConsumerTests` target is a non-`@testable`
 public-seam smoke test (`PublicSeamSmokeTests`); it catches `public` →

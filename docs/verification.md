@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **486 tests** pass (267 XCTest + 219
+Expected: build clean (no warnings), **508 tests** pass (267 XCTest + 241
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds. The split is read from `swift test`'s output: the XCTest
@@ -89,8 +89,14 @@ follow-up commits on the same branch; the PR description records the rounds.
   after the actor is released, a
   full-buffer write is unblocked by `shutdownOnce`, and the lexical pins hold
   `runPump`'s wake-before-join/release-after-join ordering, the two-argument
-  `closeOnce` call-site allowlist, and the in-lock syscalls. Also green: the
-  loopback handshake and the fail-closed DER matrix.
+  `closeOnce` call-site allowlist, and the in-lock syscalls.
+  `SSHTLSTransportReadyWaiterTests` covers the #237 `ReadyWaiter` pre-`start`
+  arm: the fast-`.ready`/failure buffering, first-terminal-wins, the
+  second-concurrent-wait guard (one winner, one already-attached failure, the
+  winner still resolves), and the arm-before-`start` source pin (the ordering
+  is not behaviourally reproducible — the race only loses under host
+  starvation; the pin strips comments and requires a unique anchor). Also
+  green: the loopback handshake and the fail-closed DER matrix.
 - Re-check the `nonisolated` markers on `TeleportTLSTrust` and
   `TeleportLogging` if isolation changed, and — when `SSHTLSTransport`,
   `PumpFDCloser`, or any coordinator/generator/keyring class is touched — that
@@ -129,7 +135,11 @@ follow-up commits on the same branch; the PR description records the rounds.
   listener rejection-reason hygiene and the source-level privacy pin) and
   `TeleportFrozenTextTests` (`TeleportFrozenTextTests.swift:137-172`: the
   listener defaults wiring) — a listener log or error-text change must keep
-  both green.
+  both green. The seam itself is pinned by
+  `BrowserMFACeremonyFailFastPinsTests`: `run` must build through
+  `makeListener(logger)` (no re-hardcoded listener), the init must keep the
+  production default, and the fail-fast/approval-page/redaction ceremony
+  tests must carry no wall clock or poll.
 
 ### Coordinator / keyring change
 - `TeleportKeyRingTests` + `TeleportCoordinatorSmokeTests` +
@@ -138,7 +148,11 @@ follow-up commits on the same branch; the PR description records the rounds.
   redaction pins (`TeleportRedactionTests`) + the structured-login-error
   shape/mapping suite (`TeleportLoginClientErrorShapeTests`, including the
   `GRPCError.http2` packing tripwire) + `TeleportFrozenTextTests` green when a
-  log site or an error text changes.
+  log site or an error text changes. Bootstrap retry/gate changes additionally
+  run `TeleportBootstrapCoordinatorRetryTests` (the #267 retry re-`begin`) and
+  `MockTeleportBootstrapCoordinatorGateTests` (the #277 mock hold); the mock
+  Safari helper surface is pinned by
+  `MockWebAuthenticationSessionPresenterHelperTests`.
 - The atomic credential pair (#41) additionally runs
   `TeleportLoginCoordinatorGenerationTests` (the login generation guards and
   the login half: supersession cannot tear, one pair/zero singles, the

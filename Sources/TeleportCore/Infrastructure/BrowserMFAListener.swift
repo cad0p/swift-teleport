@@ -38,6 +38,25 @@ import CryptoKit
 import Network
 import os.log
 
+/// The loopback listener surface the Browser MFA ceremony drives. A seam so
+/// tests can drive the fail-fast path without a real loopback bind (issue
+/// #401); production always gets `BrowserMFAListener`.
+///
+/// Declared unconditionally (outside the `canImport(Network)` gate below):
+/// `BrowserMFACeremony.init`'s `makeListener` default names it on every
+/// platform, and `import Network` above is unconditional anyway, so no build
+/// configuration is affected.
+///
+/// `nonisolated` is load-bearing: the package targets set
+/// `.defaultIsolation(MainActor.self)`, so an unmarked protocol would be
+/// MainActor-isolated and the `nonisolated` production conformer would not
+/// satisfy it.
+nonisolated public protocol BrowserMFAListening: AnyObject, Sendable {
+    func start() async throws -> String
+    func waitForResponse() async throws -> Proto_CredentialAssertionResponse
+    func cancel()
+}
+
 #if canImport(Network)
 
 // MARK: - Errors
@@ -73,7 +92,14 @@ nonisolated enum BrowserMFAListenerError: Error, LocalizedError {
 /// `nonisolated` + `@unchecked Sendable`: every piece of mutable state is
 /// guarded by `stateLock`, and the Network callbacks run on the private
 /// serial `ioQueue`.
-nonisolated final class BrowserMFAListener: NSObject, @unchecked Sendable {
+///
+/// `public` (with the one-argument `init(logger:)` below) so the public
+/// `BrowserMFACeremony.init(makeListener:)` default can construct the
+/// production listener: a public default argument cannot name an internal
+/// type or its internal initializer. The designated initializer (with the
+/// timeout/factory seams) stays internal — the public surface is the
+/// production factory only.
+public nonisolated final class BrowserMFAListener: NSObject, BrowserMFAListening, @unchecked Sendable {
 
     // MARK: Configuration
 
@@ -169,6 +195,22 @@ nonisolated final class BrowserMFAListener: NSObject, @unchecked Sendable {
 
     // MARK: Init
 
+    /// The production initializer: the ceremony's `makeListener` default
+    /// constructs the listener through this. The designated initializer's
+    /// timeout/factory parameters stay internal test seams.
+    public convenience init(
+        logger: Logger = Logger(subsystem: "Teleport", category: "TeleportBrowserMFA")
+    ) {
+        self.init(
+            logger: logger,
+            timeout: BrowserMFAListener.defaultWaitTimeout,
+            readTimeout: BrowserMFAListener.defaultReadTimeout,
+            startTimeout: BrowserMFAListener.defaultStartTimeout,
+            maxConcurrentConnections: BrowserMFAListener.defaultMaxConcurrentConnections,
+            listenerFactory: { try BrowserMFAListener.makeLoopbackListener(host: $0, port: $1) }
+        )
+    }
+
     init(
         logger: Logger = Logger(subsystem: "Teleport", category: "TeleportBrowserMFA"),
         timeout: TimeInterval = BrowserMFAListener.defaultWaitTimeout,
@@ -248,7 +290,7 @@ nonisolated final class BrowserMFAListener: NSObject, @unchecked Sendable {
     ///
     /// - Throws: `BrowserMFAListenerError.listenerFailed` if the random key
     ///   cannot be generated or no loopback listener can be bound.
-    func start() async throws -> String {
+    public func start() async throws -> String {
         var keyBytes = [UInt8](repeating: 0, count: Self.secretKeyByteCount)
         let rngStatus = SecRandomCopyBytes(kSecRandomDefault, keyBytes.count, &keyBytes)
         guard rngStatus == errSecSuccess else {
@@ -318,7 +360,7 @@ nonisolated final class BrowserMFAListener: NSObject, @unchecked Sendable {
     /// overwriting the first waiter's continuation (A4). A bare `resume`
     /// buffers into `pending`, so the "already resolved" failure is reached
     /// only by a wait after a resolution whose buffered result was consumed.
-    func waitForResponse() async throws -> Proto_CredentialAssertionResponse {
+    public func waitForResponse() async throws -> Proto_CredentialAssertionResponse {
         // The per-wait token lets `onCancel` resolve only the wait this call
         // installed: a rejected second waiter's cancellation must not resume
         // the first waiter's continuation.
@@ -428,7 +470,7 @@ nonisolated final class BrowserMFAListener: NSObject, @unchecked Sendable {
     /// Tears the listener down and resolves an installed wait promptly with
     /// `CancellationError`. Later waits fail fast instead of arming a new
     /// deadline.
-    func cancel() {
+    public func cancel() {
         let teardown = withState { state -> (continuation: CheckedContinuation<Proto_CredentialAssertionResponse, Error>?, listeners: [NWListener], connections: [BrowserMFAHTTPConnection]) in
             state.cancelled = true
             state.didResume = true
