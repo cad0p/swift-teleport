@@ -71,7 +71,7 @@ package enum TeleportErrorRedaction {
     /// `HeadlessError.http(status:body:)` — the raw body — while the
     /// bootstrap path's client wraps every failure in `HeadlessError` too.
     /// A `GRPCError` still reaches this renderer from the gRPC/HTTP-2 layer
-    /// (`.http2` carries an `NWError` message, not a packed body) and from
+    /// (`.http2` carries an `NWError`/NIO pipeline message, not a packed body) and from
     /// the login client's begin-decode branch
     /// (`TeleportHTTPClient.swift:196`). Both families are matched
     /// explicitly, so the `localizedDescription` fallback is reached only by
