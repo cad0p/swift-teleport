@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **453 tests** pass (234 XCTest + 219
+Expected: build clean (no warnings), **467 tests** pass (248 XCTest + 219
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds. The split is read from `swift test`'s output: the XCTest
@@ -106,7 +106,29 @@ follow-up commits on the same branch; the PR description records the rounds.
 ### WebAuthn / SEP change
 - `FixtureTests` (8) green — the byte-exact Go oracle; an absent fixture is a
   hard failure, never a skip.
-- `SEPSignerAlgorithmTests` + `WebAuthnResponseJSONTests` green.
+- `SEPSignerAlgorithmTests` + `WebAuthnResponseJSONTests` green. The SEP rows
+  now also pin the restored load semantics: the whole token-scoped
+  `loadKeyQuery` dictionary (SEP-1) and the source pin that `loadKey` always
+  queries while only `sign` reads the cache (SEP-2). SEP-3's behavioural
+  software-key test was dropped after its positive control measured
+  `errSecItemNotFound` for the supplied 32-byte label (the macOS keychain
+  storifies the label), so the dictionary pin is the honest ceiling; the
+  device smoke stays owner-gated (residual, never a claim).
+
+### Listener / browser-MFA change
+- `BrowserMFAListenerLoopbackTests` green — the loopback HTTP contract plus the
+  restored shapes: the A4 double-wait guards and per-wait cancellation token,
+  the A5 over-cap discard-only drain (wait-for-header, split-terminator,
+  no-slot, size-bound, and the never-buffers source pin), the A3 decode
+  boundary (a missing required field is terminal; unparseable base64 still
+  degrades), and the D2 complete-header 400. The drain's source pin is a
+  formatting tripwire: re-verify the discard-only property when
+  restructuring.
+- The redaction and frozen-text pins stay in force for this surface:
+  `TeleportRedactionTests` (the listener rejection-reason hygiene and the
+  source-level privacy pin) and `TeleportFrozenTextTests` (the listener
+  defaults wiring) — a listener log or error-text change must keep both
+  green.
 
 ### Coordinator / keyring change
 - `TeleportKeyRingTests` + `TeleportCoordinatorSmokeTests` +

@@ -1,6 +1,6 @@
 # Test Coverage
 
-`swift test` runs **453 tests** across two frameworks and three targets:
+`swift test` runs **467 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
@@ -8,8 +8,8 @@
 | `TeleportCoreTests` | XCTest | 6 | 84 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
 | `TeleportPackageTests` | Swift Testing | 10 | 75 |
-| `TeleportPackageTests` | XCTest | 15 | 150 |
-| **Total** | | | **453** |
+| `TeleportPackageTests` | XCTest | 15 | 164 |
+| **Total** | | | **467** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -34,13 +34,13 @@
 | `TeleportCredentialReuseMatcherTests` | Swift Testing | the generalized duplicate-row reuse matcher (9) |
 | `TeleportCredentialInvalidationPolicyTests` | Swift Testing | the pure credential clear rule (6) |
 | `FixtureTests` | XCTest | the 8 committed Go SEP fixtures, byte-compared (8) |
-| `BrowserMFAListenerLoopbackTests` | XCTest | the loopback HTTP contract (27) |
-| `BrowserMFACeremonyLoopbackURLTests` | XCTest | real non-zero-port loopback URL + teardown (3) |
+| `BrowserMFAListenerLoopbackTests` | XCTest | the loopback HTTP contract, including the A4 wait guards/token, the A5 over-cap discard-only drain, the A3 decode boundary, and the D2 complete-header 400 (38) |
+| `BrowserMFACeremonyLoopbackURLTests` | XCTest | real non-zero-port loopback URL + teardown + the not-started fail-fast (A7) (4) |
 | `ProtoWireCompatTests` | XCTest | golden protobuf wire bytes (12) |
 | `WebAuthnResponseJSONTests` | XCTest | registration/assertion response JSON (7) |
 | `HeadlessLoginWireTests` | XCTest | `HeadlessLogin.post` (URL/200-only/error mapping) + coordinator failure paths (16) |
 | `TeleportLoginWireTests` | XCTest | `LoginFinishReq` v16/v17 field compat (1) |
-| `SEPSignerAlgorithmTests` | XCTest | signer algorithm/label contract + nested SEP key attributes (2) |
+| `SEPSignerAlgorithmTests` | XCTest | signer algorithm/label contract + nested SEP key attributes + the token-scoped load query (SEP-1) and the load-always-queries source pin (SEP-2) (4) |
 | `TeleportFrozenTextTests` | XCTest | frozen error texts + listener defaults wiring + OSStatus signer classification (16) |
 | `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime + listener rejection reasons) (18) |
 | `TeleportLoginClientErrorShapeTests` | XCTest | real-client structured login errors over loopback (incl. the decode boundary), coordinator `.server`/`.unknown` mapping, and the packing tripwire (9) |
