@@ -11,26 +11,30 @@ a protocol-extension default (a default no-op would let a future conformer silen
 Under the D13 `0.x` policy (minors may break the API; patches never) this is a minor release.
 
 Login continuation guards + dismissal latch (#48), matching the host fixes
-[`cad0p/vvterm#240/#279`](https://github.com/cad0p/vvterm/pull/297) (`eccec38f`),
-[`#298`](https://github.com/cad0p/vvterm/pull/305) (`dd3ed8bc`) and
-[`#272`](https://github.com/cad0p/vvterm/pull/272) (`4253f48e`):
+[`cad0p/vvterm#240/#279`](https://github.com/cad0p/vvterm/issues/240)
+(host fix PR [`#297`](https://github.com/cad0p/vvterm/pull/297), `eccec38f`),
+[`cad0p/vvterm#298`](https://github.com/cad0p/vvterm/issues/298)
+(host fix PR [`#307`](https://github.com/cad0p/vvterm/pull/307), `dd3ed8bc`), and
+[`cad0p/vvterm#272`](https://github.com/cad0p/vvterm/issues/272)
+(host fix PR [`#278`](https://github.com/cad0p/vvterm/pull/278), `4253f48e`):
 
 - the login coordinator gains a monotonic request-generation token with a re-take after every
   suspension point (`registeredCredentialID`/`registeredUserHandle` reads, `login/begin` and
   `login/finish` success **and** each catch's first statement, the keyID-mismatch `clear`, the
   pinned `clusterTLSState` read, `updateClusterHostKeys`, the atomic pair store, and the
   store-failure helper) — a superseded continuation can no longer overwrite a newer attempt's
-  terminal state or start stale keyring work; `cancel()` bumps before its terminal write;
+  terminal state or start stale keyring work on the production keyring path; `cancel()` bumps
+  before its terminal write;
 - both coordinators gain the synchronous dismissal latch: `latchDismissal()` on the public
   coordinating protocols (no protocol-extension default), a `private(set) isDismissalLatched`
   flag that makes `begin()` / bootstrap `retry()` terminal, and the public exhaustive
   `dismissalRequiresTeardown` maps — closing the window where the view schedules `cancel()`
   asynchronously and a continuation released in between could still write a terminal success;
-- the five #298 continuation sites get their per-site pin tests, and the suite grows to 486 tests
-  (267 XCTest + 219 Swift Testing);
-- a write already in flight is allowed to land complete (the pair write stays atomic); the latch
-  bounds the writes, not the flow — it cannot interrupt `SecKeyCreateSignature` or the HTTP
-  request.
+- the five #298 continuation sites get their per-site pin tests, and the suite grows from 467 to
+  486 tests (267 XCTest + 219 Swift Testing);
+- a write already in flight is allowed to land complete (the pair write stays atomic); the
+  generation bump (in `cancel()` and the latch) bounds the writes, not the flow — it cannot
+  interrupt `SecKeyCreateSignature` or the HTTP request.
 <!-- USER-EDITABLE SECTION END -->
 
 ### 🐛 Bug Fixes
