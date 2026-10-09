@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **467 tests** pass (248 XCTest + 219
+Expected: build clean (no warnings), **486 tests** pass (267 XCTest + 219
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds. The split is read from `swift test`'s output: the XCTest
@@ -133,16 +133,18 @@ follow-up commits on the same branch; the PR description records the rounds.
 
 ### Coordinator / keyring change
 - `TeleportKeyRingTests` + `TeleportCoordinatorSmokeTests` +
-  `TeleportBootstrapCoordinatorGenerationTests` (stale-continuation guards) +
-  `TeleportBootstrapCoordinatorTimeoutTests` green; the redaction pins
-  (`TeleportRedactionTests`) + the structured-login-error shape/mapping suite
-  (`TeleportLoginClientErrorShapeTests`, including the `GRPCError.http2` packing
-  tripwire) + `TeleportFrozenTextTests` green when a log site
-  or an error text changes.
+  `TeleportBootstrapCoordinatorGenerationTests` (stale-continuation guards +
+  the dismissal latch) + `TeleportBootstrapCoordinatorTimeoutTests` green; the
+  redaction pins (`TeleportRedactionTests`) + the structured-login-error
+  shape/mapping suite (`TeleportLoginClientErrorShapeTests`, including the
+  `GRPCError.http2` packing tripwire) + `TeleportFrozenTextTests` green when a
+  log site or an error text changes.
 - The atomic credential pair (#41) additionally runs
-  `TeleportLoginCoordinatorGenerationTests` (the login half: supersession
-  cannot tear, one pair/zero singles, the post-throw D4 states) and the
-  source pins `TeleportCredentialPairPinsTests` (one pair call per
+  `TeleportLoginCoordinatorGenerationTests` (the login generation guards and
+  the login half: supersession cannot tear, one pair/zero singles, the
+  post-throw D4 states) + `TeleportDismissalTests` (both state maps and the
+  latch-while-parked pair-lands-complete contract) and the source pins
+  `TeleportCredentialPairPinsTests` (one pair call per
   coordinator; the keyring pair body non-async, key-first and suspend-free;
   the adapter's one-hop `MainActor.run`; the real writer's
   update-first/non-destructive `SecItem*` body). The keyring's new stored

@@ -90,9 +90,50 @@ public protocol TeleportLoginCoordinating: AnyObject, ObservableObject {
     /// - Parameter cluster: the Teleport cluster config.
     func begin(cluster: TeleportCluster) async
 
-    /// Cancel an in-flight login. Cancels the Face ID prompt (if showing)
-    /// + the HTTP call (if in flight).
+    /// Cancel an in-flight login: bump the request generation and write the
+    /// terminal `.failed(.faceIDCancelled)` state. It does NOT cancel the
+    /// in-flight `login/begin`/`login/finish` request and cannot dismiss a live
+    /// Face ID prompt (`SecKeyCreateSignature` is uninterruptible); the bump
+    /// bounds the *writes*, not the flow. The scheduled teardown the view runs
+    /// after `latchDismissal()` closes the dismissal window.
     func cancel() async
+
+    /// Latch a dismissal synchronously, before the async teardown is scheduled.
+    ///
+    /// The generation bump lands in the same MainActor turn as the view's
+    /// `.onDisappear`/Cancel action, so a continuation that has not yet passed
+    /// its next re-take cannot start a keyring write or a terminal `.success`
+    /// after the user dismissed the flow. A write already in flight is not
+    /// stopped, and `cancel()` still performs the teardown; this only closes
+    /// the window between the dismissal and the teardown task starting.
+    ///
+    /// Declared without a protocol-extension default so every conformer must
+    /// decide explicitly (a default no-op would let a future conformer silently
+    /// not latch).
+    func latchDismissal()
+}
+
+public extension TeleportLoginState {
+    /// Whether dismissing the login sheet must tear the flow down.
+    ///
+    /// `.success` is the Phase-3 hand-off (the sheet shows the host-login step
+    /// and Continue persists the row), so a dismissal then must not cancel the
+    /// issued cert. A `.failed` state is gate-false: the paths that produce it
+    /// have already latched/run `cancel()` (the toolbar Cancel, a Face ID
+    /// cancel surfacing as a `SignerError`), and every other `.failed`
+    /// producer returns from `begin` immediately afterwards. That holds even
+    /// though the cancel-written `.failed` is reached while
+    /// `login/begin`/`login/finish` may still be in flight — the latch, not
+    /// this gate, is what drops those continuations. Every in-flight state
+    /// does: the `begin` task is still running and (across the HTTP awaits)
+    /// can still write after the sheet is gone. Exhaustive switch with no
+    /// `default`, so a future state cannot silently mis-map.
+    var dismissalRequiresTeardown: Bool {
+        switch self {
+        case .idle, .awaitingFaceID, .fetchingCert: return true
+        case .success, .failed: return false
+        }
+    }
 }
 
 @MainActor
@@ -134,6 +175,20 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
     /// keeps the default.
     private let privateKeyDataEncoder: (String) -> Data?
 
+    /// Monotonic token identifying the current login attempt. Bumped by
+    /// `begin` and `cancel` (and by the dismissal latch), so a continuation
+    /// from an older attempt cannot write state or keyring state after a newer
+    /// attempt — or a cancel — took over. The #222/#239 shape, applied to the
+    /// login coordinator.
+    private var requestGeneration = 0
+
+    /// Whether a dismissal has been latched for this flow. Semantic first (it
+    /// makes `begin` terminal) and the ordering point the wiring tests await.
+    /// Concrete-only (`private(set)`, no protocol getter): only
+    /// `latchDismissal()` is called through the existential, and the tests hold
+    /// the concrete type.
+    private(set) var isDismissalLatched = false
+
     private let logger: Logger
 
     public init(
@@ -157,18 +212,32 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
     }
 
     public func begin(cluster: TeleportCluster) async {
+        // Terminal after a dismissal latch: a stray retry after the sheet was
+        // dismissed must not re-arm the flow (the latch is per-flow and never
+        // reset, because a coordinator is one sheet and a fresh presentation
+        // gets a fresh coordinator).
+        guard !isDismissalLatched else { return }
+        // Bump the generation so a continuation from a previous attempt cannot
+        // write state this attempt owns.
+        requestGeneration &+= 1
+        let generation = requestGeneration
         state = .idle
         logger.info("beginning login for cluster \(cluster.host, privacy: .private(mask: .hash))")
 
         // ── Load the registered SEP key + userHandle ────────────────────
         // The credentialID + userHandle were persisted at Phase 2. The SEP
         // key itself is in the Secure Enclave (loaded via loadKey).
-        guard let credentialID = await keyRing.registeredCredentialID(for: cluster.id) else {
+        let registeredCredentialID = await keyRing.registeredCredentialID(for: cluster.id)
+        // A `cancel()`/newer `begin()` during the read owns the state now; this
+        // continuation must not use the result.
+        guard generation == requestGeneration else { return }
+        guard let credentialID = registeredCredentialID else {
             logger.error("no registered SEP key for cluster \(cluster.id.uuidString, privacy: .public)")
             state = .failed(.noRegisteredKey)
             return
         }
         let userHandle = await keyRing.registeredUserHandle(for: cluster.id)
+        guard generation == requestGeneration else { return }
         if userHandle == nil {
             logger.error("no registered userHandle for cluster \(cluster.id.uuidString, privacy: .public)")
             state = .failed(.noRegisteredKey)
@@ -198,7 +267,19 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         let beginResp: LoginBeginResponse
         do {
             beginResp = try await httpClient.loginBegin(baseURL: baseURL)
+            // A `cancel()`/newer `begin()` during the request owns the state
+            // now; this continuation must not use the response.
+            // Host parity, host-unpinned: no test in either suite supersedes
+            // while `loginBegin` is parked and then releases a success, so
+            // deleting this guard alone leaves the full suite green
+            // (measured); a refactor touching the continuation flow must
+            // re-derive it.
+            guard generation == requestGeneration else { return }
         } catch {
+            // The catch runs before any post-await guard, so the re-take must
+            // be its first statement: a stale continuation must not write
+            // `.failed` over the newer attempt's state.
+            guard generation == requestGeneration else { return }
             // A wire-derived failure can carry the raw server body —
             // `HeadlessError.http(status:body:)` is what the login client
             // throws for a non-200 call (#40); a `GRPCError` from the
@@ -288,7 +369,14 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
                 sshPubKey: sshPubKeyBytes,
                 ttl: ttl
             )
+            // A `cancel()`/newer `begin()` during the request owns the state
+            // now; this continuation must not use the response.
+            guard generation == requestGeneration else { return }
         } catch {
+            // The catch runs before any post-await guard, so the re-take must
+            // be its first statement: a stale continuation must not write
+            // `.failed` over the newer attempt's state.
+            guard generation == requestGeneration else { return }
             // Same class as `login/begin` above: a wire-derived failure whose
             // log payload carries the case/status only, never the raw body.
             logger.error("login/finish failed: \(TeleportErrorRedaction.wireFailure(error), privacy: .public)")
@@ -345,6 +433,10 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
                     "issued certificate keyID does not match the configured Teleport user for cluster \(cluster.id.uuidString, privacy: .public) — rejecting and clearing the credential"
                 )
                 await keyRing.clear(for: cluster.id)
+                // The clear is already in flight when a supersession lands, so
+                // it is allowed to commit (§1.4); only the terminal state is
+                // withheld.
+                guard generation == requestGeneration else { return }
                 state = .failed(.server("Certificate user binding check failed: the certificate does not belong to this Teleport user"))
                 return
             }
@@ -369,11 +461,13 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         // capture remains TOFU, an accepted risk.
         if let hostSigners = finishResp.hostSigners, let first = hostSigners.first {
             let pinnedClusterName = await keyRing.clusterTLSState(for: cluster.id)?.clusterName
+            guard generation == requestGeneration else { return }
             if TeleportHostKeyUpdatePolicy.matchesPinnedCluster(
                 domainName: first.domainName,
                 pinnedClusterName: pinnedClusterName
             ) {
                 let update = await keyRing.updateClusterHostKeys(first.checkingKeys, for: cluster.id)
+                guard generation == requestGeneration else { return }
                 if update == .rejectedWouldDropPinnedKeys {
                     logger.error(
                         "Host CA key refresh rejected for cluster \(cluster.id.uuidString, privacy: .public) — pinned anchors kept; re-bootstrap required"
@@ -399,7 +493,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
             // encoder is a test seam), but a nil here cannot write a pair:
             // route it through the same store-failure outcome rather than
             // committing half a credential.
-            await finishWithStoreFailure(cluster: cluster, failureMessage: nil)
+            await finishWithStoreFailure(generation: generation, cluster: cluster, failureMessage: nil)
             return
         }
         do {
@@ -422,11 +516,15 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
                 "failed to store the login credential pair: \(String(describing: error), privacy: .public)"
             )
             await finishWithStoreFailure(
+                generation: generation,
                 cluster: cluster,
                 failureMessage: (error as? TeleportCredentialStoreError)?.errorDescription
             )
             return
         }
+        // Re-take after the pair store: a superseded attempt must not reach the
+        // terminal state.
+        guard generation == requestGeneration else { return }
         logger.info("login succeeded — cert \(certPEM.count) chars, valid until \(certValidBefore.debugDescription, privacy: .public)")
 
         state = .success(
@@ -443,19 +541,23 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
     /// store-failure text (`nil` for the generic message), so the typed
     /// concurrent-clear case is distinguishable from a keychain failure.
     ///
-    /// The package login coordinator has no request-generation token (the
-    /// host's #240/#279 login continuation guards were never ported — see the
-    /// follow-up issue), so there are no generation re-takes here; the pair
-    /// write's interleaving atomicity is the login half's supersession
-    /// guarantee.
+    /// The re-takes below (entry, post-read, post-clear) are the host's
+    /// post-#296 additions (`vvterm@fc7ab79d`), not part of the original
+    /// `eccec38f` generation port.
     private func finishWithStoreFailure(
+        generation: Int,
         cluster: TeleportCluster,
         failureMessage: String?
     ) async {
+        // Entry re-take: the catch path arrives after the pair write's await.
+        guard generation == requestGeneration else { return }
         let binding = TeleportStoredCredentialBinding.readBoundCert(
             snapshot: await keyRing.liveCredentialSnapshot(for: cluster.id),
             username: cluster.username
         )
+        // The read is an await too; a supersession during it must not write the
+        // stale failure or the stored-cert success.
+        guard generation == requestGeneration else { return }
         let storedCert: OpenSSHCertificate
         switch binding {
         case .bound(let cert, _):
@@ -475,6 +577,13 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
                 "stored credential keyID does not match the configured Teleport user for cluster \(cluster.id.uuidString, privacy: .public) — rejecting and clearing the credential"
             )
             await keyRing.clear(for: cluster.id)
+            // The clear is already in flight when a supersession lands, so it
+            // is allowed to commit (§1.4); only the terminal state is
+            // withheld. Host parity, host-unpinned: no test in either suite
+            // gates the helper's `clear` after the snapshot read, so deleting
+            // this guard alone leaves the full suite green (measured); a
+            // refactor touching the continuation flow must re-derive it.
+            guard generation == requestGeneration else { return }
             state = .failed(.server("Certificate user binding check failed: the certificate does not belong to this Teleport user"))
             return
         }
@@ -486,11 +595,27 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
 
     public func cancel() async {
         logger.info("cancelling login")
+        // Bump before the state write so a stale continuation cannot overwrite
+        // `.faceIDCancelled`.
+        requestGeneration &+= 1
         // There's no way to cancel a blocking SecKeyCreateSignature from
         // outside (the LAContext is internal to the signer). The user
         // cancels via the Face ID prompt's Cancel button, which surfaces
         // as a SignerError → .faceIDCancelled. We just reset the state.
+        //
+        // This does NOT cancel the in-flight `login/begin`/`login/finish`
+        // request and cannot dismiss a live Face ID prompt; the generation
+        // bump bounds the *writes*, not the flow.
         state = .failed(.faceIDCancelled)
+    }
+
+    /// Latch a dismissal synchronously, before the async teardown is
+    /// scheduled. Idempotent (the toolbar Cancel followed by `.onDisappear`
+    /// double-latches harmlessly) and per-flow (never reset).
+    public func latchDismissal() {
+        guard !isDismissalLatched else { return }
+        requestGeneration &+= 1
+        isDismissalLatched = true
     }
 
     // MARK: - Error mapping

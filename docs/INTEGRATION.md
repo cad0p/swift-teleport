@@ -107,6 +107,17 @@ integration. `Fixtures/HostSurfaceCheck/Sources/HostSurfaceCheck/HostSurfaceMirr
 mirrors it as a compile-time contract in a separate package (so it sees only
 `public`).
 
+On dismissal, call `latchDismissal()` synchronously from the sheet's
+`.onDisappear`/Cancel action and gate the teardown on
+`state.dismissalRequiresTeardown` — the host's Phase-2 wiring does both. The
+latch bump lands in the same MainActor turn as the dismissal, so a
+continuation released in the window before the async teardown cannot start a
+keyring write or commit a terminal `.success`; a write already in flight is
+allowed to land complete. The latch is per-flow and never resets, so a
+coordinator is one sheet: a fresh presentation must construct a fresh
+coordinator, because a latched coordinator's `begin()`/`retry()` are terminal
+no-ops.
+
 ## Error mapping
 
 The package throws `TeleportPackageError` (transport/keychain) and its own

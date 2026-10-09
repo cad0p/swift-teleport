@@ -146,6 +146,10 @@ public final class MockTeleportBootstrapCoordinator: ObservableObject, TeleportB
         state = .failed(.userCancelled)
     }
 
+    /// The mock scripts no real continuation races; the latch is the real
+    /// coordinator's concern.
+    public func latchDismissal() {}
+
     public func retry() async {
         retryCallCount += 1
         state = .idle

@@ -1,6 +1,6 @@
 # Test Coverage
 
-`swift test` runs **467 tests** across two frameworks and three targets:
+`swift test` runs **486 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
@@ -8,8 +8,8 @@
 | `TeleportCoreTests` | XCTest | 6 | 84 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
 | `TeleportPackageTests` | Swift Testing | 10 | 75 |
-| `TeleportPackageTests` | XCTest | 15 | 164 |
-| **Total** | | | **467** |
+| `TeleportPackageTests` | XCTest | 16 | 183 |
+| **Total** | | | **486** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -45,7 +45,7 @@
 | `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime + listener rejection reasons) (18) |
 | `TeleportLoginClientErrorShapeTests` | XCTest | real-client structured login errors over loopback (incl. the decode boundary), coordinator `.server`/`.unknown` mapping, and the packing tripwire (9) |
 | `TeleportBootstrapCoordinatorTimeoutTests` | XCTest | timeout classification + wrapped-cancel asymmetry (10) |
-| `TeleportBootstrapCoordinatorGenerationTests` | XCTest | stale-continuation request-generation guards; the atomic pair write (supersession cannot tear, one pair/zero singles, the post-throw D4 states, the snapshot-read re-take) (13) |
+| `TeleportBootstrapCoordinatorGenerationTests` | XCTest | stale-continuation request-generation guards; the dismissal latch (drops a parked POST success, terminal for retry/begin, clear/pair-write re-takes); the atomic pair write (supersession cannot tear, one pair/zero singles, the post-throw D4 states, the snapshot-read re-take) (16) |
 | `TeleportSynchronousReleaseTests` | XCTest | isolated-deinit synchronous release (1) |
 
 ## New package-local suites
@@ -56,7 +56,8 @@
 | `TeleportKeyRingReuseTests` | Swift Testing | the real keyring's reuse helpers (completeness, seeding) + the mock's key/cert non-copy (5) |
 | `TeleportKeyRingInvalidationConformanceTests` | Swift Testing | `TeleportCredentialInvalidating` on the real keyring (2) |
 | `TeleportCredentialPairPinsTests` | Swift Testing | source pins for the atomic pair write: one pair call per coordinator, the keyring pair body (non-async, key-first, suspend-free), the adapter's one-hop `MainActor.run`, and the real writer's update-first/non-destructive body (4) |
-| `TeleportLoginCoordinatorGenerationTests` | XCTest | the login half of the atomic pair write: a superseded pair write cannot tear, one pair/zero singles, and the post-throw D4 states (7) |
+| `TeleportLoginCoordinatorGenerationTests` | XCTest | the login request-generation guards (stale success/failure/cancel cannot land, the #298 per-site re-takes, the dismissal latch) and the atomic pair write: a superseded pair write cannot tear, one pair/zero singles, and the post-throw D4 states (20) |
+| `TeleportDismissalTests` | XCTest | the exhaustive `dismissalRequiresTeardown` maps for both coordinator states + the login latch-while-the-pair-write-is-parked pair-lands-complete test (3) |
 | `TeleportCoordinatorSmokeTests` | Swift Testing | the three real coordinators against `TeleportTesting` mocks (3) |
 | `PublicSeamSmokeTests` | Swift Testing | the non-`@testable` v0.1.0 seam (7) |
 
@@ -83,7 +84,10 @@ suites. The #262 additions stay host-side for the same reason:
 (minus the resolver matrix, which moved here), `TeleportCredentialReuseTests`
 (the `Server` half), `TeleportCredentialInvalidationTests` (the
 `ServerManager` wiring half), `TeleportBootstrapViewWiringTests`, and
-`SSHErrorDiagnosticsTests`.
+`SSHErrorDiagnosticsTests`. The dismissal view wiring stays host-side too:
+`TeleportLoginDismissalWiringTests`'s `UIHostingController` tests and the two
+view source pins (the package has no UI target); the coordinator-level latch
+semantics and both state maps are ported in `TeleportDismissalTests`.
 
 ## Reworked during the port
 

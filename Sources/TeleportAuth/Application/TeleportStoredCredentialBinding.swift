@@ -25,9 +25,8 @@ enum TeleportStoredCredentialBinding {
         /// No live credential pair, or its cert does not parse.
         case unavailable
         /// A stored cert for a different user. The caller clears and fails
-        /// closed; this classification does not clear on its own — the
-        /// bootstrap caller re-takes its request generation before and after
-        /// the clear.
+        /// closed; this classification does not clear on its own — each caller
+        /// re-takes its request generation before and after the clear.
         case foreignUser
     }
 
@@ -40,8 +39,7 @@ enum TeleportStoredCredentialBinding {
     /// Classify a live credential snapshot's cert against the configured
     /// username. Synchronous by design: each caller awaits
     /// `liveCredentialSnapshot` itself and keeps its own continuation guards
-    /// around that read (the bootstrap coordinator's generation re-takes; the
-    /// login coordinator has none yet — follow-up #48).
+    /// around that read (both coordinators' generation re-takes).
     static func readBoundCert(
         snapshot: (certPEM: String, privateKeyPEM: Data)?,
         username: String
