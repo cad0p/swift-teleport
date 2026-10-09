@@ -2,10 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
-## [calver-released]
+## [0.5.1] - 2026-10-09
 
 <!-- USER-EDITABLE SECTION START -->
-<!-- Add your curated release notes here. -->
+**Patch release: additive public surface + behavior fixes; no protocol break.**
+
+- `TeleportBootstrapCoordinator.retry()` re-runs `begin(cluster:)` ("Reopen Safari") — the host view
+  only calls `retry()`, so this restores the user-visible retry (host `24e27af5`, #267).
+- `BrowserMFAListening` seam + a defaulted `makeListener` on `BrowserMFACeremony.init` (host
+  `da56b322` #401; test halves `642117ee` #405) — additive; the fail-fast guard is driven through the
+  seam.
+- `OpenSSHCertificate.rawBlob` + a public `sshString` wire builder (host `9445393e`, #268/#269) —
+  additive; agent forwarding stays host-side.
+- `MockWebAuthenticationSessionPresenter` gains `liveSessionCount` + `waitUntilOpenStarted(_:timeout:)`
+  (host `24e27af5`, #267).
+- **Correctness**: `SSHTLSTransport` arms `ReadyWaiter` **before** `connection.start(...)` and buffers
+  the first terminal state, so a fast `.ready` cannot be missed by a late handler (host `2e533466`,
+  #237).
+- `MockTeleportBootstrapCoordinator` gains the `holdsForApproval:` init + `releaseApproval()` approval
+  gate (host `414dda9c`, #277).
+
+Test counts: 508 = 267 XCTest + 241 Swift Testing.
 <!-- USER-EDITABLE SECTION END -->
 
 ### 🐛 Bug Fixes
