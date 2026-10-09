@@ -470,21 +470,239 @@ nonisolated final class BrowserMFAListenerLoopbackTests: XCTestCase {
         }
         XCTAssertEqual(listener.activeConnectionCount, 1, "the first connection must hold the only slot")
 
-        // The listener answers an over-cap connection *before* it reads
-        // anything (`start()` -> `finish(503)`), so this probe must not send a
-        // request: the listener closes as soon as the 503 is written, and a
-        // send racing that close surfaces as ECONNRESET instead of the
-        // response under test (observed once on CI, 2026-09-24). Connecting
-        // and reading pins the same property without the race.
-        let probe = NWConnection(host: .ipv4(.loopback), port: endpointPort, using: .tcp)
-        defer { probe.cancel() }
-        try await connect(probe)
-        let response = try await receiveResponse(probe)
+        // The listener drains an over-cap request until the header terminator
+        // before answering 503 (`drainRejectedRequest`), so the probe can send
+        // a complete request and read the 503. This test pins the "over-cap
+        // answers 503 and never resolves the login" contract; it does not
+        // reproduce the #233 RST class (never reproduced on a real socket —
+        // residual 1), and the drain is header-scoped: a request body is never
+        // drained. The probe carries a *valid* sealed envelope so a drain that
+        // routed into `handle` would answer 200 — the assertions below then
+        // prove the over-cap path never resolves the login.
+        let envelope = try Self.encryptedEnvelope(
+            plaintext: try Self.loginResponsePlaintext(id: "over-cap"),
+            secretKeyHex: listener.secretKeyHex
+        )
+        let request = Self.callbackRequest(secretKey: listener.secretKeyHex, response: envelope)
+        let response = try await sendRawRequest(request, host: .ipv4(.loopback), port: listener.port)
         XCTAssertTrue(
             response.hasPrefix("HTTP/1.1 503"),
             "an over-cap connection must get 503; got: \(response)"
         )
         XCTAssertFalse(listener.didResume, "an over-cap connection must not resolve the login")
+        XCTAssertEqual(
+            listener.activeConnectionCount,
+            1,
+            "the over-cap drain must not take or release an admission slot"
+        )
+    }
+
+    /// The drain answers an over-cap connection only once its request header
+    /// is complete. The immediate-503 revision answers during the negative
+    /// window; the drain waits for `\r\n\r\n` (or a bound). One
+    /// `NWConnection.receive` is issued and the partial-then-terminator send
+    /// completes it.
+    @MainActor
+    func testOverCapConnectionWaitsForTheRequestBeforeAnswering() async throws {
+        let listener = BrowserMFAListener(timeout: 60, readTimeout: 120, maxConcurrentConnections: 1)
+        _ = try await listener.start()
+        defer { listener.cancel() }
+
+        guard let endpointPort = NWEndpoint.Port(rawValue: listener.port) else {
+            return XCTFail("listener must expose a bound port")
+        }
+        let silent = NWConnection(host: .ipv4(.loopback), port: endpointPort, using: .tcp)
+        defer { silent.cancel() }
+        try await connect(silent)
+        let admitDeadline = ContinuousClock.now + .seconds(15)
+        while listener.activeConnectionCount < 1, ContinuousClock.now < admitDeadline {
+            await Task.yield()
+        }
+        XCTAssertEqual(listener.activeConnectionCount, 1, "the first connection must hold the only slot")
+
+        let probe = NWConnection(host: .ipv4(.loopback), port: endpointPort, using: .tcp)
+        defer { probe.cancel() }
+        try await connect(probe)
+
+        // Exactly one receive; its callback fills `result`.
+        let result = OSAllocatedUnfairLock<ProbeResult?>(initialState: nil)
+        probe.receive(minimumIncompleteLength: 1, maximumLength: 4096) { data, _, _, error in
+            if let error {
+                result.withLock { $0 = .failure(String(describing: error)) }
+            } else {
+                result.withLock { $0 = .response(String(data: data ?? Data(), encoding: .utf8) ?? "") }
+            }
+        }
+
+        try await send(probe, Data("GET /callback HTTP/1.1\r\nHost: localhost\r\n".utf8))
+        try await Task.sleep(for: .milliseconds(250))
+        XCTAssertNil(
+            result.withLock { $0 },
+            "the drain must not answer before the request header is complete"
+        )
+        XCTAssertEqual(
+            listener.activeConnectionCount,
+            1,
+            "an over-cap connection must not take an admission slot while it is draining"
+        )
+
+        try await send(probe, Data("\r\n\r\n".utf8))
+        let responseDeadline = ContinuousClock.now + .seconds(60)
+        while result.withLock({ $0 }) == nil, ContinuousClock.now < responseDeadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        guard case .response(let response)? = result.withLock({ $0 }) else {
+            return XCTFail(
+                "the drained over-cap request must be answered; got \(String(describing: result.withLock { $0 }))"
+            )
+        }
+        XCTAssertTrue(
+            response.hasPrefix("HTTP/1.1 503"),
+            "an over-cap connection must get 503; got: \(response)"
+        )
+        XCTAssertFalse(listener.didResume, "an over-cap connection must not resolve the login")
+    }
+
+    /// The drain's ≤3-byte tail window must recognize a `\r\n\r\n` split
+    /// across two TCP writes — the fiddliest part of the port — and then
+    /// answer 503.
+    ///
+    /// Host-state tolerance, not a retry: the drain only falls back to its
+    /// 503 at `readTimeout` (120 s here), so the response wait is raced
+    /// against a 20 s ceiling over the package's 15 s `connect(_:)` /
+    /// `receiveResponse(_:)` watchdogs (#260). If the tail join is broken the
+    /// watchdog resolves first and the test reds at 15 s — well before the
+    /// drain's 120 s fallback 503, which must not false-green it.
+    @MainActor
+    func testOverCapConnectionDrainsASplitTerminator() async throws {
+        let listener = BrowserMFAListener(timeout: 60, readTimeout: 120, maxConcurrentConnections: 1)
+        _ = try await listener.start()
+        defer { listener.cancel() }
+
+        guard let endpointPort = NWEndpoint.Port(rawValue: listener.port) else {
+            return XCTFail("listener must expose a bound port")
+        }
+        let silent = NWConnection(host: .ipv4(.loopback), port: endpointPort, using: .tcp)
+        defer { silent.cancel() }
+        try await connect(silent)
+        let admitDeadline = ContinuousClock.now + .seconds(15)
+        while listener.activeConnectionCount < 1, ContinuousClock.now < admitDeadline {
+            await Task.yield()
+        }
+        XCTAssertEqual(listener.activeConnectionCount, 1, "the first connection must hold the only slot")
+
+        let request = Self.callbackRequest(secretKey: listener.secretKeyHex, response: nil)
+        // Split one byte from the end: the first write ends with `\r\n\r`
+        // (the 3-byte tail window) and the terminator completes across the
+        // second write.
+        let responseTask = Task {
+            try await sendRawRequest(
+                request,
+                splitAt: request.count - 1,
+                host: .ipv4(.loopback),
+                port: listener.port
+            )
+        }
+        let response: String? = await withTaskGroup(of: String?.self) { group -> String? in
+            group.addTask {
+                try? await responseTask.value
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(20))
+                responseTask.cancel()
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        guard let response else {
+            return XCTFail("the split terminator was not joined before the drain's readTimeout fallback")
+        }
+        XCTAssertTrue(
+            response.hasPrefix("HTTP/1.1 503"),
+            "a split terminator must still drain to 503; got: \(response)"
+        )
+        XCTAssertFalse(listener.didResume)
+    }
+
+    /// An over-cap connection's drain must not take or release an admission
+    /// slot: after the 503 the silent holder still holds the only slot.
+    @MainActor
+    func testOverCapConnectionDoesNotTakeAnAdmissionSlot() async throws {
+        let listener = BrowserMFAListener(timeout: 60, readTimeout: 30, maxConcurrentConnections: 1)
+        _ = try await listener.start()
+        defer { listener.cancel() }
+
+        guard let endpointPort = NWEndpoint.Port(rawValue: listener.port) else {
+            return XCTFail("listener must expose a bound port")
+        }
+        let silent = NWConnection(host: .ipv4(.loopback), port: endpointPort, using: .tcp)
+        defer { silent.cancel() }
+        try await connect(silent)
+        let admitDeadline = ContinuousClock.now + .seconds(15)
+        while listener.activeConnectionCount < 1, ContinuousClock.now < admitDeadline {
+            await Task.yield()
+        }
+        XCTAssertEqual(listener.activeConnectionCount, 1, "the first connection must hold the only slot")
+
+        let request = Self.callbackRequest(secretKey: listener.secretKeyHex, response: nil)
+        let response = try await sendRawRequest(request, host: .ipv4(.loopback), port: listener.port)
+        XCTAssertTrue(
+            response.hasPrefix("HTTP/1.1 503"),
+            "an over-cap connection must get 503; got: \(response)"
+        )
+        XCTAssertEqual(
+            listener.activeConnectionCount,
+            1,
+            "the over-cap drain must not take or release an admission slot"
+        )
+    }
+
+    /// The drain stops at `maxRequestBytes` even when no terminator arrives:
+    /// an over-cap client streaming the cap + 1 bytes is answered 503 well
+    /// before `readTimeout` (not 413 — the admitted path's answer — and not at
+    /// the deadline).
+    @MainActor
+    func testOverCapConnectionDrainStopsAtTheSizeBound() async throws {
+        let listener = BrowserMFAListener(timeout: 60, readTimeout: 30, maxConcurrentConnections: 1)
+        _ = try await listener.start()
+        defer { listener.cancel() }
+
+        guard let endpointPort = NWEndpoint.Port(rawValue: listener.port) else {
+            return XCTFail("listener must expose a bound port")
+        }
+        let silent = NWConnection(host: .ipv4(.loopback), port: endpointPort, using: .tcp)
+        defer { silent.cancel() }
+        try await connect(silent)
+        let admitDeadline = ContinuousClock.now + .seconds(15)
+        while listener.activeConnectionCount < 1, ContinuousClock.now < admitDeadline {
+            await Task.yield()
+        }
+        XCTAssertEqual(listener.activeConnectionCount, 1, "the first connection must hold the only slot")
+
+        var request = Data("GET /callback?response=".utf8)
+        request.append(Data(repeating: 0x41, count: BrowserMFAListener.maxRequestBytes + 1))
+        let clock = ContinuousClock()
+        let started = clock.now
+        let response = try await sendRawRequest(request, host: .ipv4(.loopback), port: listener.port)
+        let elapsed = clock.now - started
+        XCTAssertTrue(
+            response.hasPrefix("HTTP/1.1 503"),
+            "the drain's size bound must answer 503; got: \(response)"
+        )
+        XCTAssertLessThan(
+            elapsed,
+            .seconds(20),
+            "the size bound must stop the drain well before the 30s readTimeout"
+        )
+        XCTAssertFalse(listener.didResume)
+    }
+
+    /// The outcome of the one-shot over-cap probe read.
+    private enum ProbeResult: Sendable {
+        case response(String)
+        case failure(String)
     }
 
     /// A request that exceeds the buffered ceiling is answered 413 instead of
@@ -1287,6 +1505,60 @@ nonisolated final class BrowserMFAListenerLoopbackTests: XCTestCase {
             ],
         ]
         return try JSONSerialization.data(withJSONObject: payload)
+    }
+
+    // MARK: - Source pins
+
+    /// A5's discard-only invariant, pinned at the source: neither
+    /// `drainRejectedRequest` nor `readRejectedHeader` may mention `buffer`.
+    /// Every behavioural drain test would still pass if a refactor appended
+    /// each rejected chunk to `buffer` before discarding it, which would let
+    /// an over-cap flood pin per-connection memory. FORMATTING TRIPWIRE, NOT
+    /// A PROOF: the slice is anchored on the exact signature and the 4-space
+    /// closing brace, so a rename or restructure defeats it — re-verify the
+    /// discard-only property when restructuring.
+    @MainActor
+    func testDrainPathNeverBuffersRejectedBytes() throws {
+        let source = try String(
+            contentsOf: Self.repositoryRoot().appendingPathComponent(
+                "Sources/TeleportCore/Infrastructure/BrowserMFAListener.swift"
+            ),
+            encoding: .utf8
+        )
+        for signature in [
+            "private func drainRejectedRequest()",
+            "private func readRejectedHeader(drained: Int, tail: Data)",
+        ] {
+            let body = try Self.functionBody(signature, in: source)
+            XCTAssertFalse(
+                body.contains("buffer"),
+                "\(signature) must stay discard-only (A5); re-verify the discard-only property when restructuring"
+            )
+        }
+    }
+
+    /// The repository root, derived from this file's location
+    /// (`Tests/TeleportPackageTests/BrowserMFAListenerLoopbackTests.swift`).
+    private static func repositoryRoot() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // BrowserMFAListenerLoopbackTests.swift
+            .deletingLastPathComponent()  // TeleportPackageTests/
+            .deletingLastPathComponent()  // Tests/
+    }
+
+    /// The text from `\(signature)` to the next 4-space closing brace — the
+    /// body of a class-level method. A rename or re-indent breaks the anchor,
+    /// which is why the assertion carries the "re-verify" message.
+    private static func functionBody(_ signature: String, in source: String) throws -> String {
+        let start = try XCTUnwrap(
+            source.range(of: signature),
+            "could not find \(signature)"
+        )
+        let end = try XCTUnwrap(
+            source.range(of: "\n    }\n", range: start.upperBound..<source.endIndex),
+            "could not find the closing brace of \(signature)"
+        )
+        return String(source[start.lowerBound..<end.lowerBound])
     }
 }
 
