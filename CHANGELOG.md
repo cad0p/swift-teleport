@@ -8,7 +8,7 @@ All notable changes to this project will be documented in this file.
 **Patch release: internal code change; no public API change.**
 
 - `GRPCClient` copies the gRPC response body with `getBytes(at:length:)` instead of
-  `Data.append(contentsOf:)` over `readableBytesView`. The latter resolved to the
+  `Data.append(contentsOf:)` over `readableBytesView`. On Xcode 27, the latter resolved to the
   `Foundation.ContiguousBytes` overload, whose retroactive conformance lives in swift-nio's separate
   `NIOFoundationEssentialsCompat` product (undeclared by the target) — the Xcode 27 dynamic-framework
   link rejects it (`Undefined symbols … protocol conformance descriptor for NIOCore.ByteBufferView :
