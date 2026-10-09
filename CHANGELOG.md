@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [calver-released]
+
+<!-- USER-EDITABLE SECTION START -->
+<!-- Add your curated release notes here. -->
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Write the cert and its private key as one atomic pair (closes #41)
+
+### 📚 Documentation
+
+- Refresh the README status and the PROVENANCE version labels for v0.3.4 (closes #46)
+
+
 ## [0.3.4] - 2026-10-09
 
 <!-- USER-EDITABLE SECTION START -->
