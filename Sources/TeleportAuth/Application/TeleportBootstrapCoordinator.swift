@@ -130,7 +130,9 @@ public protocol TeleportBootstrapCoordinating: AnyObject, ObservableObject {
     /// Cancel an in-flight bootstrap. Cancels the POST + dismisses Safari.
     func cancel() async
 
-    /// Retry after a failure. Resets state to `.idle` then calls `begin`.
+    /// Retry after a failure. Cancels the in-flight attempt (POST + Safari),
+    /// resets state to `.idle`, then re-runs `begin(cluster:)` with the
+    /// cluster of the last `begin` call.
     func retry() async
 
     /// Latch a dismissal synchronously, before the async teardown is scheduled.
@@ -222,6 +224,11 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
     /// pub key). Used to build the Safari URL.
     private var headlessID: String = ""
 
+    /// The cluster of the most recent `begin(cluster:)`. Retained so
+    /// `retry()` can re-run the whole bootstrap (fresh keypair, fresh POST,
+    /// fresh Safari session) without the caller re-invoking `begin`.
+    private var lastCluster: TeleportCluster?
+
     private let logger: Logger
 
     /// The result of a successful Phase 1 bootstrap. Passed to the Phase 2
@@ -295,6 +302,7 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         lastBootstrapResult = nil
         tlsKeyPair = nil
         headlessID = ""
+        lastCluster = cluster
         state = .preparing
 
         logger.info("beginning bootstrap for cluster \(cluster.host, privacy: .private(mask: .hash)) user=\(cluster.username, privacy: .private)")
@@ -462,9 +470,13 @@ public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBoots
         // state now. Defensive: the presenter `cancel()` is synchronous today.
         guard generation == requestGeneration else { return }
         state = .idle
-        // The caller (the bootstrap sheet) re-invokes begin() with the
-        // same cluster. We don't capture the cluster here to avoid stale
-        // state; the sheet holds it.
+        // Re-run the full bootstrap with the same cluster: a fresh keypair,
+        // a fresh headless ID, a fresh POST and a fresh Safari session. This
+        // is what the "Reopen Safari" button got wrong (#267): resetting to
+        // `.idle` alone left the sheet on the waiting spinner with no Safari
+        // and no POST, because no caller re-invoked `begin`.
+        guard let cluster = lastCluster else { return }
+        await begin(cluster: cluster)
     }
 
     // MARK: - POST result handling
