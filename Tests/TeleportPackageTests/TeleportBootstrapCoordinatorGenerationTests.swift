@@ -390,4 +390,318 @@ nonisolated final class TeleportBootstrapCoordinatorGenerationTests: XCTestCase 
         XCTAssertEqual(store.storedTLSStateCount, 0)
         XCTAssertNil(keyRing.clusterTLSState(for: cluster.id))
     }
+
+    // MARK: - A superseded atomic pair write cannot tear the credential
+
+    /// A supersession landing while attempt 1's atomic pair write is parked
+    /// cannot tear the credential. Attempt 2 runs to `.success` (pair 2 + TLS
+    /// state) while attempt 1 is parked; releasing attempt 1 then lands **pair
+    /// 1 complete** over pair 2. The final snapshot is one attempt's complete
+    /// pair, and the committed cert and key halves come from the same write
+    /// invocation.
+    ///
+    /// This is a coordinator-shape test with a suspension-capable conformer;
+    /// the production atomicity is pinned structurally by
+    /// `TeleportCredentialPairPinsTests` (the keyring pair body suspends
+    /// nowhere).
+    ///
+    /// The measured counterfactual (coordinator-only revert to the two
+    /// singles) fails this test with `(cert_1, key_2)` — see the PR report.
+    @MainActor
+    func testSupersededPairWriteCannotTearTheBootstrapCredential() async {
+        let cluster = makeCluster()
+        let keyRing = MockTeleportKeyRing()
+        let store = GatedTeleportCredentialStore(underlying: keyRing)
+        let http = GatedTeleportHTTPClient()
+        let generator = AttemptTaggedSSHKeyPairGenerator(attemptCount: 2)
+        let coordinator = makeCoordinator(http: http, keyRing: store, sshKeyPairGenerator: generator)
+
+        // Distinct per-attempt validity so a stale attempt-1 terminal write is
+        // distinguishable from attempt 2's (with identical payloads the
+        // final-state assertion below would be vacuous).
+        let attempt1ValidBefore = TeleportFixtureSupport.attemptCertValidBefore.addingTimeInterval(60)
+        let attempt2ValidBefore = TeleportFixtureSupport.attemptCertValidBefore.addingTimeInterval(120)
+
+        let attempt1Cert = TeleportFixtureSupport.makeSynthUserCert(
+            rawKey: generator.attempts[0].rawKey,
+            keyID: cluster.username,
+            validBefore: attempt1ValidBefore
+        )
+        let attempt2Cert = TeleportFixtureSupport.makeSynthUserCert(
+            rawKey: generator.attempts[1].rawKey,
+            keyID: cluster.username,
+            validBefore: attempt2ValidBefore
+        )
+
+        // Attempt 1: release its POST so it reaches the pair write and parks.
+        let first = Task { await coordinator.begin(cluster: cluster) }
+        await http.waitUntilStarted(1)
+        await http.release(
+            index: 0,
+            with: .success(TeleportFixtureSupport.makeAttemptHeadlessResponse(
+                attempt: 0,
+                generator: generator,
+                cluster: cluster,
+                validBefore: attempt1ValidBefore
+            ))
+        )
+        await store.waitUntilFirstCredentialWriteStarted()
+        XCTAssertEqual(store.storedPairCount, 0, "attempt 1's pair write is parked, not committed")
+
+        // Attempt 2: supersedes attempt 1 and runs to `.success`, landing its
+        // complete pair + TLS state while attempt 1 is still parked.
+        let second = Task { await coordinator.begin(cluster: cluster) }
+        await http.waitUntilStarted(2)
+        await http.release(
+            index: 1,
+            with: .success(TeleportFixtureSupport.makeAttemptHeadlessResponse(
+                attempt: 1,
+                generator: generator,
+                cluster: cluster,
+                validBefore: attempt2ValidBefore
+            ))
+        )
+        await second.value
+
+        XCTAssertEqual(coordinator.state, .success)
+        XCTAssertEqual(
+            coordinator.lastBootstrapResult?.certValidBefore,
+            attempt2ValidBefore,
+            "attempt 2's result is the current hand-off"
+        )
+        let afterSecond = keyRing.liveCredentialSnapshot(for: cluster.id)
+        XCTAssertEqual(afterSecond?.certPEM, attempt2Cert)
+        XCTAssertEqual(afterSecond?.privateKeyPEM, Data(generator.attempts[1].privateKeyPEM.utf8))
+
+        // Release attempt 1's parked pair write: it must land attempt 1's
+        // complete pair (cert_1 + key_1), never mixing halves.
+        await store.releaseFirstCredentialWrite()
+        await first.value
+
+        XCTAssertEqual(store.storedPairCount, 2)
+        let final = keyRing.liveCredentialSnapshot(for: cluster.id)
+        XCTAssertEqual(final?.certPEM, attempt1Cert, "the released pair write lands attempt 1's cert last")
+        let finalKeyText = (final?.privateKeyPEM).flatMap { String(data: $0, encoding: .utf8) } ?? "<no key committed>"
+        XCTAssertEqual(
+            finalKeyText,
+            generator.attempts[0].privateKeyPEM,
+            "the final key must be attempt 1's — a mismatch means the pair tore (cert_1 + key_2); actual=\(finalKeyText)"
+        )
+        XCTAssertEqual(
+            store.committedCertWriteOrdinal, store.committedKeyWriteOrdinal,
+            "the final cert and key halves must come from the same (atomic pair) write invocation"
+        )
+        XCTAssertEqual(coordinator.state, .success, "attempt 1's stale pair write must not write the terminal state")
+        XCTAssertEqual(
+            coordinator.lastBootstrapResult?.certValidBefore,
+            attempt2ValidBefore,
+            "attempt 1's stale pair write must not overwrite attempt 2's hand-off result"
+        )
+    }
+
+    // MARK: - Exactly one pair write, zero single writes
+
+    /// T2 (bootstrap): exactly one atomic pair write and zero single writes,
+    /// with the terminal `.success` as the positive control (a flow that bails
+    /// before the store cannot satisfy it).
+    @MainActor
+    func testBootstrapStoresTheCredentialAsExactlyOnePairWrite() async {
+        let cluster = makeCluster()
+        let keyRing = MockTeleportKeyRing()
+        let store = GatedTeleportCredentialStore(underlying: keyRing, gateTheFirstStore: false)
+        let http = MockTeleportHTTPClient()
+        http.scriptedHeadlessResponse = TeleportFixtureSupport.makeFixtureSuccessResponse()
+        let coordinator = makeCoordinator(http: http, keyRing: store)
+
+        await coordinator.begin(cluster: cluster)
+
+        XCTAssertEqual(coordinator.state, .success)
+        XCTAssertEqual(store.storedPairCount, 1)
+        XCTAssertEqual(store.singleStoreBootstrapCertCount, 0)
+        XCTAssertEqual(store.singleStoreEd25519PrivateKeyCount, 0)
+    }
+
+    // MARK: - The pair-write failure and the post-throw states
+
+    /// `cancel()` while the pair write is parked, then a throwing key seam on
+    /// release — nothing is committed, no TLS state is written, and the
+    /// cancel's `.failed(.userCancelled)` wins over the store-failure outcome
+    /// (the generation re-take withholds it).
+    @MainActor
+    func testCancelledRequestDuringPairStoreFailureCommitsNothing() async {
+        let cluster = makeCluster()
+        let keyRing = MockTeleportKeyRing()
+        keyRing.storeEd25519PrivateKeyError = TeleportPackageError.keychain(errSecAuthFailed)
+        let store = GatedTeleportCredentialStore(underlying: keyRing)
+        let http = GatedTeleportHTTPClient()
+        let coordinator = makeCoordinator(http: http, keyRing: store)
+
+        let beginTask = Task { await coordinator.begin(cluster: cluster) }
+        await http.waitUntilStarted(1)
+        await http.release(
+            index: 0,
+            with: .success(TeleportFixtureSupport.makeFixtureSuccessResponse())
+        )
+        await store.waitUntilFirstCredentialWriteStarted()
+
+        await coordinator.cancel()
+        XCTAssertEqual(coordinator.state, .failed(.userCancelled))
+
+        await store.releaseFirstCredentialWrite()
+        await beginTask.value
+
+        XCTAssertEqual(coordinator.state, .failed(.userCancelled))
+        XCTAssertEqual(store.storedPairCount, 0, "the throwing write was attempted but committed nothing")
+        XCTAssertNil(keyRing.liveCertPEM(for: cluster.id))
+        XCTAssertNil(keyRing.liveEd25519PrivateKey(for: cluster.id))
+        XCTAssertNil(coordinator.lastBootstrapResult)
+        XCTAssertNil(keyRing.clusterTLSState(for: cluster.id))
+    }
+
+    /// D4 (bootstrap) non-nil branch: a failed pair write with a usable prior
+    /// stored pair keeps the hand-off working — `.success` with the STORED
+    /// cert's fields, and no TLS state written on this path.
+    @MainActor
+    func testBootstrapPairStoreFailureWithAPriorPairSucceedsWithTheStoredPair() async throws {
+        let cluster = makeCluster()
+        let keyRing = MockTeleportKeyRing()
+        let priorCert = TeleportFixtureSupport.makeSynthUserCert(
+            rawKey: Data(repeating: 0x77, count: 32),
+            keyID: cluster.username
+        )
+        let priorKey = Data("prior-ed25519-private-key".utf8)
+        keyRing.seed(
+            clusterId: cluster.id,
+            fixture: MockTeleportKeyRing.Fixture(
+                hasBootstrapCert: false,
+                hasSEPKey: true,
+                certValidBefore: nil,
+                credentialID: Data([1, 2, 3]),
+                userHandle: Data("handle".utf8),
+                deviceName: "test-device"
+            )
+        )
+        keyRing.storeBootstrapCert(priorCert, validBefore: TeleportFixtureSupport.attemptCertValidBefore, for: cluster.id)
+        try keyRing.storeEd25519PrivateKey(priorKey, for: cluster.id)
+        keyRing.storeEd25519PrivateKeyError = TeleportPackageError.keychain(errSecAuthFailed)
+
+        let store = GatedTeleportCredentialStore(underlying: keyRing, gateTheFirstStore: false)
+        let http = MockTeleportHTTPClient()
+        http.scriptedHeadlessResponse = TeleportFixtureSupport.makeFixtureSuccessResponse()
+        let coordinator = makeCoordinator(http: http, keyRing: store)
+
+        await coordinator.begin(cluster: cluster)
+
+        XCTAssertEqual(coordinator.state, .success)
+        XCTAssertEqual(coordinator.lastBootstrapResult?.sshCertPEM, priorCert)
+        XCTAssertEqual(coordinator.lastBootstrapResult?.certValidBefore, TeleportFixtureSupport.attemptCertValidBefore)
+        XCTAssertEqual(keyRing.liveCredentialSnapshot(for: cluster.id)?.certPEM, priorCert)
+        XCTAssertEqual(keyRing.liveCredentialSnapshot(for: cluster.id)?.privateKeyPEM, priorKey)
+        XCTAssertNil(keyRing.clusterTLSState(for: cluster.id), "the throw path does not write TLS state")
+    }
+
+    /// F1 (bootstrap): the D4 helper must re-apply the stored cert's
+    /// user-binding gate. A prior stored pair whose cert belongs to a foreign
+    /// Teleport user (the row's username was edited after storage) must not be
+    /// handed off as `.success` when this attempt's pair write throws: the
+    /// helper clears the credential and fails closed, exactly like the main
+    /// path.
+    @MainActor
+    func testBootstrapPairStoreFailureWithAForeignStoredCertClearsAndFails() async throws {
+        let cluster = makeCluster()
+        let keyRing = MockTeleportKeyRing()
+        let priorCert = TeleportFixtureSupport.makeSynthUserCert(
+            rawKey: Data(repeating: 0x88, count: 32),
+            keyID: "someone-else"  // not cluster.username — the stored cert is foreign
+        )
+        let priorKey = Data("foreign-prior-ed25519-key".utf8)
+        keyRing.seed(
+            clusterId: cluster.id,
+            fixture: MockTeleportKeyRing.Fixture(
+                hasBootstrapCert: false,
+                hasSEPKey: true,
+                certValidBefore: nil,
+                credentialID: Data([1, 2, 3]),
+                userHandle: Data("handle".utf8),
+                deviceName: "test-device"
+            )
+        )
+        keyRing.storeBootstrapCert(priorCert, validBefore: TeleportFixtureSupport.attemptCertValidBefore, for: cluster.id)
+        try keyRing.storeEd25519PrivateKey(priorKey, for: cluster.id)
+        keyRing.storeEd25519PrivateKeyError = TeleportPackageError.keychain(errSecAuthFailed)
+
+        let store = GatedTeleportCredentialStore(underlying: keyRing, gateTheFirstStore: false)
+        let http = MockTeleportHTTPClient()
+        http.scriptedHeadlessResponse = TeleportFixtureSupport.makeFixtureSuccessResponse()
+        let coordinator = makeCoordinator(http: http, keyRing: store)
+
+        await coordinator.begin(cluster: cluster)
+
+        XCTAssertEqual(
+            coordinator.state,
+            .failed(.unknown("Certificate user binding check failed: the certificate does not belong to this Teleport user")),
+            "the stored foreign cert must not be handed off as .success"
+        )
+        XCTAssertNil(keyRing.credentials[cluster.id], "the foreign stored credential was cleared")
+        XCTAssertNil(keyRing.liveCertPEM(for: cluster.id))
+        XCTAssertNil(keyRing.liveEd25519PrivateKey(for: cluster.id))
+        XCTAssertNil(coordinator.lastBootstrapResult)
+        XCTAssertNil(keyRing.clusterTLSState(for: cluster.id))
+    }
+
+    /// G5 (bootstrap): the `privKeyData == nil` branch is unreachable in
+    /// production (a Swift `String` always UTF-8-encodes), so it is driven
+    /// through the injected encoder. It must fail closed through the D4
+    /// outcome instead of committing half a credential.
+    @MainActor
+    func testBootstrapNilPrivateKeyDataFailsClosedWithoutAWrite() async {
+        let cluster = makeCluster()
+        let keyRing = MockTeleportKeyRing()
+        let store = GatedTeleportCredentialStore(underlying: keyRing, gateTheFirstStore: false)
+        let http = MockTeleportHTTPClient()
+        http.scriptedHeadlessResponse = TeleportFixtureSupport.makeFixtureSuccessResponse()
+        let coordinator = makeCoordinator(http: http, keyRing: store, privateKeyDataEncoder: { _ in nil })
+
+        await coordinator.begin(cluster: cluster)
+
+        XCTAssertEqual(coordinator.state, .failed(.unknown("credentials could not be stored")))
+        XCTAssertEqual(store.storedPairCount, 0, "the nil branch must not attempt a pair write")
+        XCTAssertNil(keyRing.liveCertPEM(for: cluster.id))
+        XCTAssertNil(keyRing.liveEd25519PrivateKey(for: cluster.id))
+        XCTAssertNil(coordinator.lastBootstrapResult)
+        XCTAssertNil(keyRing.clusterTLSState(for: cluster.id))
+    }
+
+    /// G5 (bootstrap): the D4 helper's post-read re-take. A `cancel()` landing
+    /// while the helper is suspended in `liveCredentialSnapshot` must keep the
+    /// helper from writing the store-failure state over `.failed(.userCancelled)`.
+    @MainActor
+    func testSupersessionDuringTheD4SnapshotReadWithholdsTheStoreFailure() async {
+        let cluster = makeCluster()
+        let keyRing = MockTeleportKeyRing()
+        keyRing.storeEd25519PrivateKeyError = TeleportPackageError.keychain(errSecAuthFailed)
+        let store = GatedTeleportCredentialStore(
+            underlying: keyRing,
+            gateTheFirstStore: false,
+            gateTheSnapshotRead: true
+        )
+        let http = MockTeleportHTTPClient()
+        http.scriptedHeadlessResponse = TeleportFixtureSupport.makeFixtureSuccessResponse()
+        let coordinator = makeCoordinator(http: http, keyRing: store)
+
+        let beginTask = Task { await coordinator.begin(cluster: cluster) }
+        await store.waitUntilSnapshotReadStarted()
+
+        await coordinator.cancel()
+        XCTAssertEqual(coordinator.state, .failed(.userCancelled))
+
+        await store.releaseSnapshotRead()
+        await beginTask.value
+
+        XCTAssertEqual(
+            coordinator.state,
+            .failed(.userCancelled),
+            "the stale store-failure must not overwrite the cancel's terminal state"
+        )
+    }
 }
