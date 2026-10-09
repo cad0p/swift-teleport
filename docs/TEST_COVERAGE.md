@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **428 tests** across two frameworks and three targets:
+`swift test` runs **453 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
 | `TeleportCoreTests` | Swift Testing | 7 | 137 |
 | `TeleportCoreTests` | XCTest | 6 | 84 |
 | `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
-| `TeleportPackageTests` | Swift Testing | 9 | 63 |
-| `TeleportPackageTests` | XCTest | 14 | 137 |
-| **Total** | | | **428** |
+| `TeleportPackageTests` | Swift Testing | 10 | 75 |
+| `TeleportPackageTests` | XCTest | 15 | 150 |
+| **Total** | | | **453** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -29,7 +29,7 @@
 | `TeleportTLSTrustTests` | Swift Testing | `TeleportTLSTrust` (chain/name/EKU/ALPN + DER fail-closed matrix) |
 | `TeleportHostLoginTests` | Swift Testing | `TeleportHostLogin` resolver + normalization + failure redaction (21) |
 | `TeleportIssuedCertValidatorTests` | Swift Testing | issued-cert binding checks (12) |
-| `TeleportCertBindingCoordinatorTests` | Swift Testing | the coordinators store nothing on a cert/key mismatch; keyID binding (12) |
+| `TeleportCertBindingCoordinatorTests` | Swift Testing | the coordinators store nothing on a cert/key mismatch; keyID binding; the pair-write failure direction (commits nothing and fails the flow) (12) |
 | `TeleportWebAuthnRPIDTests` | Swift Testing | rpID resolution through the login coordinator (8) |
 | `TeleportCredentialReuseMatcherTests` | Swift Testing | the generalized duplicate-row reuse matcher (9) |
 | `TeleportCredentialInvalidationPolicyTests` | Swift Testing | the pure credential clear rule (6) |
@@ -45,16 +45,18 @@
 | `TeleportRedactionTests` | XCTest | log redaction (source-level privacy pin + runtime + listener rejection reasons) (18) |
 | `TeleportLoginClientErrorShapeTests` | XCTest | real-client structured login errors over loopback (incl. the decode boundary), coordinator `.server`/`.unknown` mapping, and the packing tripwire (9) |
 | `TeleportBootstrapCoordinatorTimeoutTests` | XCTest | timeout classification + wrapped-cancel asymmetry (10) |
-| `TeleportBootstrapCoordinatorGenerationTests` | XCTest | stale-continuation request-generation guards (7) |
+| `TeleportBootstrapCoordinatorGenerationTests` | XCTest | stale-continuation request-generation guards; the atomic pair write (supersession cannot tear, one pair/zero singles, the post-throw D4 states, the snapshot-read re-take) (13) |
 | `TeleportSynchronousReleaseTests` | XCTest | isolated-deinit synchronous release (1) |
 
 ## New package-local suites
 
 | Suite | Framework | Subject |
 | --- | --- | --- |
-| `TeleportKeyRingTests` | Swift Testing | keyring persistence through an injected `UserDefaults`; readiness; additions-only Host CA refresh; certExpiry parse (6) |
+| `TeleportKeyRingTests` | Swift Testing | keyring persistence through an injected `UserDefaults`; readiness; additions-only Host CA refresh; certExpiry parse; the atomic pair write's round-trip/policy semantics and failure direction (hermetic via the injected keychain-writer seam) + the real-writer seeded-item round trip (14) |
 | `TeleportKeyRingReuseTests` | Swift Testing | the real keyring's reuse helpers (completeness, seeding) + the mock's key/cert non-copy (5) |
 | `TeleportKeyRingInvalidationConformanceTests` | Swift Testing | `TeleportCredentialInvalidating` on the real keyring (2) |
+| `TeleportCredentialPairPinsTests` | Swift Testing | source pins for the atomic pair write: one pair call per coordinator, the keyring pair body (non-async, key-first, suspend-free), the adapter's one-hop `MainActor.run`, and the real writer's update-first/non-destructive body (4) |
+| `TeleportLoginCoordinatorGenerationTests` | XCTest | the login half of the atomic pair write: a superseded pair write cannot tear, one pair/zero singles, and the post-throw D4 states (7) |
 | `TeleportCoordinatorSmokeTests` | Swift Testing | the three real coordinators against `TeleportTesting` mocks (3) |
 | `PublicSeamSmokeTests` | Swift Testing | the non-`@testable` v0.1.0 seam (7) |
 

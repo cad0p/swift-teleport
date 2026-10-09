@@ -34,10 +34,15 @@ its composition root:
 2. **`TeleportCredentialStore`** — the host keyring (`TeleportKeyRing`),
    exposed directly or through a MainActor-hop adapter. The seam includes
    `liveCredentialSnapshot(for:)`, the one-read cert + paired ed25519 key the
-   connect path resolves the SSH username against. The host also wires
-   `TeleportCredentialInvalidating` (the keyring conforms) into
-   `ServerManager`, which applies `TeleportCredentialInvalidationPolicy` on
-   row edits / CloudKit merges / deletes.
+   connect path resolves the SSH username against, and the atomic pair write
+   `storeCredentialPair(_:validBefore:privateKeyPEM:policy:for:)`. The pair
+   write's key write and record commit must land in one non-suspending body
+   (the package's synchronous `throws` witness), and a MainActor-hop adapter
+   must keep one `MainActor.run` hop per operation — a conformer that
+   suspends or splits the pair reintroduces the torn-credential race. The
+   host also wires `TeleportCredentialInvalidating` (the keyring conforms)
+   into `ServerManager`, which applies `TeleportCredentialInvalidationPolicy`
+   on row edits / CloudKit merges / deletes.
 3. **`BrowserMFAPresenting` / `WebAuthenticationSessionPresenting`** — own
    `ASWebAuthenticationSession`, the `vvterm` callback scheme, and the
    presentation anchor.

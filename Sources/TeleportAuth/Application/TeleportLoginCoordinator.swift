@@ -127,6 +127,13 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
     /// The clock used for the issued-certificate validity checks.
     private let now: () -> Date
 
+    /// Converts the generator's PEM string to `Data` for the pair write.
+    /// Injectable only because the `nil` branch below is unreachable in
+    /// production (a Swift `String` always UTF-8-encodes): tests inject a
+    /// `{ _ in nil }` encoder to drive the fail-closed routing, production
+    /// keeps the default.
+    private let privateKeyDataEncoder: (String) -> Data?
+
     private let logger: Logger
 
     public init(
@@ -136,7 +143,8 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         signer: any TeleportSEPSigning = SecureEnclaveSigner(),
         webAuthnBuilder: any TeleportWebAuthnBuilding = TeleportWebAuthnBuilder(),
         keyPairGenerator: any TeleportSSHKeyPairGenerating = LiveTeleportSSHKeyPairGenerator(),
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        privateKeyDataEncoder: @escaping (String) -> Data? = { $0.data(using: .utf8) }
     ) {
         self.httpClient = httpClient
         self.keyRing = keyRing
@@ -145,6 +153,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
         self.webAuthnBuilder = webAuthnBuilder
         self.keyPairGenerator = keyPairGenerator
         self.now = now
+        self.privateKeyDataEncoder = privateKeyDataEncoder
     }
 
     public func begin(cluster: TeleportCluster) async {
@@ -329,7 +338,7 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
             // the cert's principals, so a foreign cert (a different keyID)
             // would authenticate as the wrong identity. Clear whatever the row
             // holds and fail closed.
-            guard cert.keyID == cluster.username else {
+            guard TeleportStoredCredentialBinding.isBound(cert: cert, username: cluster.username) else {
                 // No username in the log: identity values use the default
                 // (private) interpolation and never `.public`.
                 logger.error(
@@ -377,25 +386,101 @@ public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoor
             }
         }
 
-        // Store the fresh cert in the key ring. Readiness flips to `ready`.
-        // Also store the ed25519 private key — the SSHClient cert seam
-        // fetches it via `liveEd25519PrivateKey` to feed libssh2.
-        await keyRing.storeLoginCert(certPEM, validBefore: certValidBefore, for: cluster.id)
-        if let privKeyData = sshPrivateKeyPEM.data(using: .utf8) {
-            do {
-                try await keyRing.storeEd25519PrivateKey(privKeyData, for: cluster.id)
-            } catch {
-                logger.error("failed to store ed25519 private key: \(error.localizedDescription, privacy: .public)")
-                // Non-fatal — the cert is stored, so readiness is correct.
-                // The SSH connect will fail with teleportCertMissing, which
-                // surfaces the right UX (re-login).
-            }
+        // Store the fresh cert and its paired ed25519 private key as one
+        // atomic pair: the key write and the record commit land in one
+        // non-suspending body, so a supersession can land a complete pair, the
+        // previous complete pair, or nothing — never a mixed pair. The single
+        // writes remain seed/test primitives; no coordinator calls them.
+        let privKeyData: Data
+        if let data = privateKeyDataEncoder(sshPrivateKeyPEM) {
+            privKeyData = data
+        } else {
+            // Unreachable today (a Swift `String` always UTF-8-encodes; the
+            // encoder is a test seam), but a nil here cannot write a pair:
+            // route it through the same store-failure outcome rather than
+            // committing half a credential.
+            await finishWithStoreFailure(cluster: cluster, failureMessage: nil)
+            return
+        }
+        do {
+            try await keyRing.storeCredentialPair(
+                certPEM,
+                validBefore: certValidBefore,
+                privateKeyPEM: privKeyData,
+                policy: .login,
+                for: cluster.id
+            )
+        } catch {
+            // Deliberate behaviour change: after a pair-write throw nothing
+            // from this attempt is guaranteed stored (the write is key-first,
+            // and a failure leaves the previous complete pair intact or
+            // nothing), so the terminal state is derived from the store's real
+            // state instead of the old false "the cert is stored, so readiness
+            // is correct". The error is mapped to a dedicated message when the
+            // typed store error identifies the concurrent-clear case.
+            logger.error(
+                "failed to store the login credential pair: \(String(describing: error), privacy: .public)"
+            )
+            await finishWithStoreFailure(
+                cluster: cluster,
+                failureMessage: (error as? TeleportCredentialStoreError)?.errorDescription
+            )
+            return
         }
         logger.info("login succeeded — cert \(certPEM.count) chars, valid until \(certValidBefore.debugDescription, privacy: .public)")
 
         state = .success(
             certValidUntil: certValidBefore,
             logins: TeleportHostLogin.nonInternalPrincipals(of: issuedCertificate)
+        )
+    }
+
+    /// The pair write threw (or could not be attempted). Nothing from this
+    /// attempt is guaranteed stored, so the terminal state is derived from the
+    /// store's real state: a usable prior pair bound to the configured user
+    /// keeps the user signed in with the **stored** cert's validity; otherwise
+    /// the flow fails and the user can retry. `failureMessage` is the mapped
+    /// store-failure text (`nil` for the generic message), so the typed
+    /// concurrent-clear case is distinguishable from a keychain failure.
+    ///
+    /// The package login coordinator has no request-generation token (the
+    /// host's #240/#279 login continuation guards were never ported — see the
+    /// follow-up issue), so there are no generation re-takes here; the pair
+    /// write's interleaving atomicity is the login half's supersession
+    /// guarantee.
+    private func finishWithStoreFailure(
+        cluster: TeleportCluster,
+        failureMessage: String?
+    ) async {
+        let binding = TeleportStoredCredentialBinding.readBoundCert(
+            snapshot: await keyRing.liveCredentialSnapshot(for: cluster.id),
+            username: cluster.username
+        )
+        let storedCert: OpenSSHCertificate
+        switch binding {
+        case .bound(let cert, _):
+            storedCert = cert
+        case .unavailable:
+            state = .failed(.unknown(failureMessage ?? "credentials could not be stored"))
+            return
+        case .foreignUser:
+            // The stored cert must belong to the configured Teleport user,
+            // exactly as the main path above requires: a stored cert for a
+            // foreign user (the row's username edited after storage) must not
+            // be handed off as a false "Signed in". Clear it and fail closed,
+            // mirroring the main path's post-clear re-take.
+            // No username in the log: identity values use the default
+            // (private) interpolation and never `.public`.
+            logger.error(
+                "stored credential keyID does not match the configured Teleport user for cluster \(cluster.id.uuidString, privacy: .public) — rejecting and clearing the credential"
+            )
+            await keyRing.clear(for: cluster.id)
+            state = .failed(.server("Certificate user binding check failed: the certificate does not belong to this Teleport user"))
+            return
+        }
+        state = .success(
+            certValidUntil: storedCert.validBeforeDate,
+            logins: TeleportHostLogin.nonInternalPrincipals(of: storedCert)
         )
     }
 

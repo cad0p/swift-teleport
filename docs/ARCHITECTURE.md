@@ -149,7 +149,11 @@ that drive the app's sheets:
 `TeleportKeyRing` is the per-cluster credential owner: UserDefaults holds the
 metadata + certs + cluster TLS state (via an injected store), the keychain
 holds the ed25519 private key, and the SEP key itself lives in the Secure
-Enclave. Readiness is derived locally through
+Enclave. The cert + its paired ed25519 key are written as one atomic pair
+(`storeCredentialPair`: key-first, one non-suspending body — interleaving
+atomicity, not crash durability), so a superseded attempt lands a complete
+pair, the previous complete pair, or nothing. Readiness is derived locally
+through
 `TeleportDeviceReadinessResolver` (fail-closed on missing Host CA anchors); the
 Host CA key refresh is additions-only (`TeleportHostKeyUpdatePolicy`). The
 keyring also owns the reuse helpers (`isReusableRegistrationSource` /
