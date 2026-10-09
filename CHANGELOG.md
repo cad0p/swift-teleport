@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [calver-released]
+
+<!-- USER-EDITABLE SECTION START -->
+<!-- Add your curated release notes here. -->
+<!-- USER-EDITABLE SECTION END -->
+
+### 🐛 Bug Fixes
+
+- *(teleport)* Port the post-v0.5.0 host deltas (closes #60)
+
+### 📚 Documentation
+
+- Refresh the README status and the PROVENANCE port rows for v0.5.0 (closes #58)
+
+
 ## [0.5.0] - 2026-10-09
 
 <!-- USER-EDITABLE SECTION START -->
