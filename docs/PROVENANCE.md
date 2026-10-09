@@ -40,7 +40,9 @@ tree:
   log interpolations are `.private(mask: .hash)` instead of `.public`.
 - **v0.3.3** carries `1e4fe09` — the #36 pump-fd shutdown/close split: the
   closer is one lock-serialized `open → shutDown → closed` machine, and
-  `runPump` joins both loops before releasing the descriptor.
+  `runPump` joins both loops before releasing the descriptor. The
+  `ReadyWaiter` pre-`start` arm half of host `2e533466` (the same host commit
+  as the pump split) is carried by v0.5.1 below.
 - **v0.3.4** carries `d455474` — the #40 login HTTP error structure: the login
   client throws the structured `HeadlessError.http(status:body:)` (and a
   body-free `HeadlessError.decode` at the 200-empty-cert site), so the log
@@ -65,6 +67,16 @@ tree:
   protocols with no protocol-extension default (source-breaking for out-of-package conformers), a
   `private(set) isDismissalLatched` flag that makes `begin()` / bootstrap `retry()` terminal, and the
   public exhaustive `dismissalRequiresTeardown` maps (host `4253f48e`, #272, host fix PR #278).
+- **v0.5.1** carries the post-v0.5.0 host deltas so the vvterm #371 Phase-2
+  cutover cannot regress: `24e27af5` (#267 — `retry()` re-runs `begin`, plus
+  the `MockWebAuthenticationSessionPresenter` helpers), `da56b322` +
+  `642117ee` (#401/#405 — the `BrowserMFAListening` protocol + the
+  `makeListener` seam and its structural pins), `9445393e` (#268/#269 —
+  `OpenSSHCertificate.rawBlob` and the public `sshString` builder; the agent
+  forwarding itself stays host-side), `2e533466` (#237 — the `ReadyWaiter`
+  pre-`start` arm), and `414dda9c` (#277 — the
+  `MockTeleportBootstrapCoordinator` `holdsForApproval`/`releaseApproval`
+  gate seam).
 
 The import preserves file content except for:
 
