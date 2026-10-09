@@ -24,6 +24,7 @@
 import Foundation
 import TeleportCore
 import TeleportTesting
+import XCTest
 
 /// A per-call gate: `wait()` suspends until `release()` is called (or returns
 /// immediately if it was already released). An actor so it is safe to hold a
@@ -52,16 +53,21 @@ final class GatedTeleportCredentialStore: TeleportCredentialStore {
     private let loginCertGate = BootstrapGate()
     private let clearGate = BootstrapGate()
     private let snapshotGate = BootstrapGate()
-    // The four #298 read/refresh gates park **every** call, unlike the
-    // claim-once `firstWriteGate`. That is safe only because every test that
-    // enables one is single-attempt: the gated read/refresh is reached by
-    // exactly one `begin`, so a gate can never be a second caller's blocker.
-    // If a test ever adds a second attempt to a gated call, the gate must
-    // become claim-once (see `holdFirstCredentialWriteIfNeeded`).
+    // The four #298 read/refresh gates are claim-once, like
+    // `firstWriteGate`: only the first call parks, and a second call
+    // `XCTFail`s and proceeds ungated. The gate is released by the test that
+    // enabled it, so without the claim a future multi-attempt test would park
+    // its second caller on a gate no test releases — and `swift test` has no
+    // per-test execution allowance, so the 20-minute job cap was the only
+    // stop.
     private let registeredCredentialIDGate = BootstrapGate()
     private let registeredUserHandleGate = BootstrapGate()
     private let clusterTLSStateGate = BootstrapGate()
     private let updateClusterHostKeysGate = BootstrapGate()
+    private var registeredCredentialIDReadClaimed = false
+    private var registeredUserHandleReadClaimed = false
+    private var clusterTLSStateReadClaimed = false
+    private var updateClusterHostKeysClaimed = false
     /// The shared hold-first gate: parks only the *first* credential write
     /// across both shapes, before any mutation. Later credential writes pass
     /// through.
@@ -297,11 +303,16 @@ final class GatedTeleportCredentialStore: TeleportCredentialStore {
 
     func clusterTLSState(for clusterId: UUID) async -> TeleportClusterTLSState? {
         if gateTheClusterTLSStateRead {
-            clusterTLSStateReadStarted = true
-            let waiters = clusterTLSStateReadWaiters
-            clusterTLSStateReadWaiters.removeAll()
-            for waiter in waiters { waiter.resume() }
-            await clusterTLSStateGate.wait()
+            if clusterTLSStateReadClaimed {
+                XCTFail("the clusterTLSState read gate is claim-once: a second call would park on a gate no test releases")
+            } else {
+                clusterTLSStateReadClaimed = true
+                clusterTLSStateReadStarted = true
+                let waiters = clusterTLSStateReadWaiters
+                clusterTLSStateReadWaiters.removeAll()
+                for waiter in waiters { waiter.resume() }
+                await clusterTLSStateGate.wait()
+            }
         }
         return underlying.clusterTLSState(for: clusterId)
     }
@@ -327,22 +338,32 @@ final class GatedTeleportCredentialStore: TeleportCredentialStore {
 
     func registeredCredentialID(for clusterId: UUID) async -> Data? {
         if gateTheRegisteredCredentialIDRead {
-            registeredCredentialIDReadStarted = true
-            let waiters = registeredCredentialIDReadWaiters
-            registeredCredentialIDReadWaiters.removeAll()
-            for waiter in waiters { waiter.resume() }
-            await registeredCredentialIDGate.wait()
+            if registeredCredentialIDReadClaimed {
+                XCTFail("the registeredCredentialID read gate is claim-once: a second call would park on a gate no test releases")
+            } else {
+                registeredCredentialIDReadClaimed = true
+                registeredCredentialIDReadStarted = true
+                let waiters = registeredCredentialIDReadWaiters
+                registeredCredentialIDReadWaiters.removeAll()
+                for waiter in waiters { waiter.resume() }
+                await registeredCredentialIDGate.wait()
+            }
         }
         return underlying.registeredCredentialID(for: clusterId)
     }
 
     func registeredUserHandle(for clusterId: UUID) async -> Data? {
         if gateTheRegisteredUserHandleRead {
-            registeredUserHandleReadStarted = true
-            let waiters = registeredUserHandleReadWaiters
-            registeredUserHandleReadWaiters.removeAll()
-            for waiter in waiters { waiter.resume() }
-            await registeredUserHandleGate.wait()
+            if registeredUserHandleReadClaimed {
+                XCTFail("the registeredUserHandle read gate is claim-once: a second call would park on a gate no test releases")
+            } else {
+                registeredUserHandleReadClaimed = true
+                registeredUserHandleReadStarted = true
+                let waiters = registeredUserHandleReadWaiters
+                registeredUserHandleReadWaiters.removeAll()
+                for waiter in waiters { waiter.resume() }
+                await registeredUserHandleGate.wait()
+            }
         }
         return underlying.registeredUserHandle(for: clusterId)
     }
@@ -483,11 +504,16 @@ final class GatedTeleportCredentialStore: TeleportCredentialStore {
     func updateClusterHostKeys(_ checkingKeys: [String], for clusterId: UUID) async -> TeleportHostKeyUpdateResult {
         updateClusterHostKeysCallCount += 1
         if gateTheUpdateClusterHostKeys {
-            updateClusterHostKeysStarted = true
-            let waiters = updateClusterHostKeysWaiters
-            updateClusterHostKeysWaiters.removeAll()
-            for waiter in waiters { waiter.resume() }
-            await updateClusterHostKeysGate.wait()
+            if updateClusterHostKeysClaimed {
+                XCTFail("the updateClusterHostKeys gate is claim-once: a second call would park on a gate no test releases")
+            } else {
+                updateClusterHostKeysClaimed = true
+                updateClusterHostKeysStarted = true
+                let waiters = updateClusterHostKeysWaiters
+                updateClusterHostKeysWaiters.removeAll()
+                for waiter in waiters { waiter.resume() }
+                await updateClusterHostKeysGate.wait()
+            }
         }
         return underlying.updateClusterHostKeys(checkingKeys, for: clusterId)
     }
