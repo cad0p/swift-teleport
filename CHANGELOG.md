@@ -2,10 +2,52 @@
 
 All notable changes to this project will be documented in this file.
 
-## [calver-released]
+## [0.4.0] - 2026-10-09
 
 <!-- USER-EDITABLE SECTION START -->
-<!-- Add your curated release notes here. -->
+**Source-breaking for out-of-package `TeleportCredentialStore` conformers**: the protocol gains
+the `storeCredentialPair` requirement. Under the D13 `0.x` policy (minors may break the API;
+patches never) this is a minor release, not a patch.
+
+Atomic credential pair (#41), matching the host issue
+[`cad0p/vvterm#296`](https://github.com/cad0p/vvterm/issues/296)
+(host fix PR [`#304`](https://github.com/cad0p/vvterm/pull/304)):
+
+- `TeleportCredentialStore` gains one atomic pair write — `storeCredentialPair(_:validBefore:privateKeyPEM:policy:for:)`
+  with a `.bootstrap` / `.login` policy — implemented by `TeleportKeyRing` as a synchronous
+  `throws` witness whose non-suspending `@MainActor` body commits the ed25519 key and the
+  credential record together, so a superseded attempt lands a complete pair, the previous complete
+  pair, or nothing — never a mixed pair;
+- the key write is update-first and non-destructive (`SecItemUpdate`; `errSecItemNotFound` →
+  `SecItemAdd`; every other status fails closed without deleting), and the record commit mutates
+  the cert fields only, preserving the registered SEP metadata;
+- both coordinators call the pair once and, on a pair-write throw, derive the terminal state from
+  the store's real contents instead of reporting a false success; the single writes remain on the
+  protocol as non-atomic seed/test primitives;
+- scope: **interleaving atomicity, not crash durability** — the record lives in `UserDefaults` and
+  the key in the Keychain with no shared transaction, so a crash between the two backends can
+  still leave a mixed pair that only the server's signature check rejects; atomicity is also per
+  keyring instance.
+
+SEP load and browser-MFA fail-fast/drain parity (#42), matching the host issue
+[`cad0p/vvterm#242`](https://github.com/cad0p/vvterm/issues/242)
+(host fix PR [`#305`](https://github.com/cad0p/vvterm/pull/305)):
+
+- `SecureEnclaveSigner.loadKey` scopes the keychain query to the Secure Enclave again
+  (`kSecAttrTokenID: kSecAttrTokenIDSecureEnclave`, pinned as a pure `loadKeyQuery` dictionary) and
+  always queries the keychain — the truth for "is this device registered" — with the in-memory
+  cache as `sign`'s fast path;
+- `BrowserMFAListener.waitForResponse()` fails a second concurrent wait fast instead of orphaning
+  the first, and a per-wait token keeps a rejected second waiter's cancellation from resuming the
+  first;
+- over-cap connections are drained (discarded, never buffered) and then answered 503 — bounded per
+  connection (header terminator / max request size / read timeout), unbounded in count, taking no
+  admission slot; a complete but unparseable header block is answered 400 immediately instead of
+  waiting out the read deadline;
+- the accepted-delta record comments (A2, A3, A6, A7, A8/D1/D3/D4) match the host's 14-row table.
+
+Tests: 453 → 467 (248 XCTest + 219 Swift Testing). The host's `#306` `OpenSSHEd25519PrivateKeyTests`
+flake hunk is deliberately not ported (no package equivalent; test-only).
 <!-- USER-EDITABLE SECTION END -->
 
 ### 🐛 Bug Fixes
