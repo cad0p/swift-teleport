@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **419 tests** pass (212 XCTest + 207
+Expected: build clean (no warnings), **428 tests** pass (221 XCTest + 207
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds.
@@ -110,7 +110,9 @@ follow-up commits on the same branch; the PR description records the rounds.
 - `TeleportKeyRingTests` + `TeleportCoordinatorSmokeTests` +
   `TeleportBootstrapCoordinatorGenerationTests` (stale-continuation guards) +
   `TeleportBootstrapCoordinatorTimeoutTests` green; the redaction pins
-  (`TeleportRedactionTests`) + `TeleportFrozenTextTests` green when a log site
+  (`TeleportRedactionTests`) + the structured-login-error shape/mapping suite
+  (`TeleportLoginClientErrorShapeTests`, including the `GRPCError.http2` packing
+  tripwire) + `TeleportFrozenTextTests` green when a log site
   or an error text changes.
 - Host-login / credential-identity changes additionally run
   `TeleportHostLoginTests`, `TeleportCertBindingCoordinatorTests`,
