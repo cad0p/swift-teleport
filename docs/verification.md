@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **508 tests** pass (267 XCTest + 241
+Expected: build clean (no warnings), **509 tests** pass (267 XCTest + 242
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds. The split is read from `swift test`'s output: the XCTest
@@ -106,6 +106,11 @@ follow-up commits on the same branch; the PR description records the rounds.
 
 ### gRPC / protobuf change
 - `ProtoWireCompatTests` green (the golden bytes are the wire contract).
+- `TeleportNIOCoreLinkPinsTests` green — the response-body copy must stay on
+  NIOCore-only APIs: a reintroduced `readableBytesView`/`ContiguousBytes` route
+  re-enters the retroactive `NIOFoundationEssentialsCompat` conformance that
+  breaks Xcode 27's dynamic-framework link (swift-teleport#66). Re-derive the
+  pin deliberately if the copy shape changes.
 - Regenerate with `scripts/regen-iotest-mfa.sh` (pinned `protoc 36.2` +
   `protoc-gen-swift 1.38.1`) and commit the `.pb.swift` with the IDL.
 

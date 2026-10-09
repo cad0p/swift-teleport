@@ -97,7 +97,16 @@ final class GRPCUnaryHandler: ChannelInboundHandler, @unchecked Sendable {
         case .head(let head):
             headers = head.headers
         case .body(let buffer):
-            body.append(contentsOf: buffer.readableBytesView)
+            // Xcode 27 dynamic-framework link (vvterm#371 / swift-teleport#66):
+            // `body.append(contentsOf: buffer.readableBytesView)` resolved to
+            // the `Foundation.ContiguousBytes` overload, whose retroactive
+            // `ByteBufferView` conformance lives in swift-nio's separate
+            // `NIOFoundationEssentialsCompat` module — not among TeleportCore's
+            // declared products — so the dynamic link failed with an undefined
+            // conformance descriptor. Copy through NIOCore instead.
+            if let bytes = buffer.getBytes(at: buffer.readerIndex, length: buffer.readableBytes) {
+                body.append(contentsOf: bytes)
+            }
         case .end(let head):
             if let head = head {
                 trailers = head

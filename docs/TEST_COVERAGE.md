@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **508 tests** across two frameworks and three targets:
+`swift test` runs **509 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
 | `TeleportCoreTests` | Swift Testing | 8 | 144 |
 | `TeleportCoreTests` | XCTest | 6 | 84 |
 | `TeleportCoreConsumerTests` | Swift Testing | 2 | 10 |
-| `TeleportPackageTests` | Swift Testing | 13 | 87 |
+| `TeleportPackageTests` | Swift Testing | 14 | 88 |
 | `TeleportPackageTests` | XCTest | 16 | 183 |
-| **Total** | | | **508** |
+| **Total** | | | **509** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -58,6 +58,7 @@
 | `TeleportKeyRingReuseTests` | Swift Testing | the real keyring's reuse helpers (completeness, seeding) + the mock's key/cert non-copy (5) |
 | `TeleportKeyRingInvalidationConformanceTests` | Swift Testing | `TeleportCredentialInvalidating` on the real keyring (2) |
 | `TeleportCredentialPairPinsTests` | Swift Testing | source pins for the atomic pair write: one pair call per coordinator, the keyring pair body (non-async, key-first, suspend-free), the adapter's one-hop `MainActor.run`, and the real writer's update-first/non-destructive body (4) |
+| `TeleportNIOCoreLinkPinsTests` | Swift Testing | the swift-teleport#66 link pin: `Sources/` names neither `readableBytesView` nor `ContiguousBytes` (comments stripped; the `GRPCClient.swift` coverage guard keeps the scan honest), and `GRPCClient` copies the readable bytes through NIOCore's `getBytes(at:length:)` (1) |
 | `TeleportLoginCoordinatorGenerationTests` | XCTest | the login request-generation guards (stale success/failure/cancel cannot land, the #298 per-site re-takes, the dismissal latch) and the atomic pair write: a superseded pair write cannot tear, one pair/zero singles, and the post-throw D4 states (20) |
 | `TeleportBootstrapCoordinatorRetryTests` | Swift Testing | the #267 retry contract: `retry()` re-runs `begin` (fresh POST + Safari), can reach `.success`, and no-ops without a prior `begin` (3) |
 | `SSHTLSTransportReadyWaiterTests` | Swift Testing | the #237 `ReadyWaiter` pre-`start` arm (host has no such suite): fast-`.ready`/failure buffering, first-terminal-wins, the second-concurrent-wait guard, and the arm-before-`start` source pin (6) |
