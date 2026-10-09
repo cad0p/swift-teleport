@@ -432,13 +432,21 @@ enum HostCompositionMirror {
         logging: any TeleportLogging,
         signer: any TeleportSEPSigning
     ) -> TeleportBootstrapCoordinator {
-        TeleportBootstrapCoordinator(
+        let coordinator = TeleportBootstrapCoordinator(
             httpClient: HostLiveTeleportHTTPClient(),
             keyRing: keyRing,
             safariPresenter: nil,
             logging: logging,
             signer: signer
         )
+        // The host's `TeleportBootstrapView` calls both of these on dismissal
+        // through the protocol, from another module; naming them here pins the
+        // public protocol requirement and the public state extension (a
+        // `public` -> `package` demotion must fail this build, not Phase 2).
+        let coordinating: any TeleportBootstrapCoordinating = coordinator
+        _ = coordinating.state.dismissalRequiresTeardown
+        coordinating.latchDismissal()
+        return coordinator
     }
 
     static func makeRegistrationCoordinator(
@@ -462,7 +470,7 @@ enum HostCompositionMirror {
         logging: any TeleportLogging,
         signer: any TeleportSEPSigning
     ) -> TeleportLoginCoordinator {
-        TeleportLoginCoordinator(
+        let coordinator = TeleportLoginCoordinator(
             httpClient: HostLiveTeleportHTTPClient(),
             keyRing: keyRing,
             logging: logging,
@@ -470,6 +478,12 @@ enum HostCompositionMirror {
             webAuthnBuilder: TeleportWebAuthnBuilder(),
             keyPairGenerator: LiveTeleportSSHKeyPairGenerator()
         )
+        // The login twin: host `TeleportLoginView` calls both on dismissal
+        // through the protocol, so the same demotion is pinned here.
+        let coordinating: any TeleportLoginCoordinating = coordinator
+        _ = coordinating.state.dismissalRequiresTeardown
+        coordinating.latchDismissal()
+        return coordinator
     }
 
     static func makeKeyRing(logging: any TeleportLogging) -> TeleportKeyRing {
