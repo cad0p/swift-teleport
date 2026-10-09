@@ -146,6 +146,17 @@ that drive the app's sheets:
   credential + fail closed on a mismatch; the login success state carries the
   cert's non-internal principals for the setup picker.
 
+Both the Phase-1 and Phase-3 coordinators carry a monotonic request-generation
+token: `begin()` (plus `cancel()`/`retry()`) bumps it, and every post-`await`
+continuation re-takes it before writing state or starting a keyring write, so a
+superseded or cancelled attempt cannot clobber the newer one. A synchronous
+`latchDismissal()` performs the same bump in the MainActor turn of the sheet
+dismissal — before the async teardown task starts — and the public
+`dismissalRequiresTeardown` state gate decides when a sheet dismissal must tear
+the flow down (`.success` is gate-false: it is the hand-off, not in-flight
+work). A write already in flight is allowed to land complete; the latch bounds
+the *writes*, not the flow.
+
 `TeleportKeyRing` is the per-cluster credential owner: UserDefaults holds the
 metadata + certs + cluster TLS state (via an injected store), the keychain
 holds the ed25519 private key, and the SEP key itself lives in the Secure

@@ -202,16 +202,20 @@ the Phase 2 host generally — can inject it without `package` access.
 ## `TeleportAuth`
 
 ```swift
-@MainActor public protocol TeleportBootstrapCoordinating: AnyObject, ObservableObject { … }
+@MainActor public protocol TeleportBootstrapCoordinating: AnyObject, ObservableObject { … latchDismissal() }
 @MainActor public final class TeleportBootstrapCoordinator: ObservableObject, TeleportBootstrapCoordinating {
     public init(httpClient:keyRing:safariPresenter:logging:signer:sshKeyPairGenerator:tlsKeyPairGenerator:now:,
                 privateKeyDataEncoder:)   // test seam only (nil branch unreachable in production)
     public struct BootstrapResult { public init(…); /* public fields */ }
-    public func begin(cluster:) async; public func cancel() async; public func retry() async
+    public func begin(cluster:) async; public func cancel() async; public func retry() async; public func latchDismissal()
 }
 public enum TeleportBootstrapState / TeleportBootstrapError { … }
+// `TeleportBootstrapState.dismissalRequiresTeardown` (public extension) is
+// true for the in-flight states (including `.failed(.safariUnavailable)`,
+// where the POST is still running) and false for `.success` and the terminal
+// `.failed` cases.
 
-@MainActor public protocol TeleportLoginCoordinating: AnyObject, ObservableObject { … }
+@MainActor public protocol TeleportLoginCoordinating: AnyObject, ObservableObject { … latchDismissal() }
 @MainActor public final class TeleportLoginCoordinator: ObservableObject, TeleportLoginCoordinating {
     public init(httpClient:keyRing:logging:signer:webAuthnBuilder:keyPairGenerator:now:,
                 privateKeyDataEncoder:)   // same test seam as the bootstrap coordinator
@@ -219,6 +223,11 @@ public enum TeleportBootstrapState / TeleportBootstrapError { … }
 public enum TeleportLoginState / TeleportLoginError { … }
 // `TeleportLoginState.success` carries the issued certificate's non-internal
 // principals: `.success(certValidUntil: Date, logins: [String])`.
+// `TeleportLoginState.dismissalRequiresTeardown` (public extension) is true
+// for the in-flight states only; `.success` is the host-login hand-off.
+// Both protocols declare `latchDismissal()` without a protocol-extension
+// default, so a conformer must decide explicitly (source-breaking for
+// out-of-package conformers; the `0.x` minor class).
 
 @MainActor public protocol TeleportCredentialInvalidating: AnyObject {
     func hasCredential(for serverId: UUID) -> Bool
