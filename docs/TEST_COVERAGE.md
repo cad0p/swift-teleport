@@ -1,15 +1,15 @@
 # Test Coverage
 
-`swift test` runs **486 tests** across two frameworks and three targets:
+`swift test` runs **507 tests** across two frameworks and three targets:
 
 | Target | Framework | Suites | Tests |
 | --- | --- | --- | --- |
-| `TeleportCoreTests` | Swift Testing | 7 | 137 |
+| `TeleportCoreTests` | Swift Testing | 8 | 143 |
 | `TeleportCoreTests` | XCTest | 6 | 84 |
-| `TeleportCoreConsumerTests` | Swift Testing | 1 | 7 |
-| `TeleportPackageTests` | Swift Testing | 10 | 75 |
+| `TeleportCoreConsumerTests` | Swift Testing | 2 | 10 |
+| `TeleportPackageTests` | Swift Testing | 13 | 87 |
 | `TeleportPackageTests` | XCTest | 16 | 183 |
-| **Total** | | | **486** |
+| **Total** | | | **507** |
 
 ## Ported suites (from `cad0p/vvterm`)
 
@@ -25,6 +25,7 @@
 | `HeadlessIDTests` | XCTest | `HeadlessID.compute` UUIDv5 golden vectors (4) |
 | `TeleportProxySubsystemTests` | Swift Testing | `TeleportProxySubsystem.request` |
 | `SSHTLSTransportTests` | Swift Testing | `SSHTLSTransport` (ALPN, TLS options, socketpair, real loopback handshake) (13) |
+| `SSHTLSTransportReadyWaiterTests` | Swift Testing | the #237 `ReadyWaiter` pre-`start` arm: fast-`.ready`/failure buffering, first-terminal-wins, and the arm-before-`start` source pin (5) |
 | `SSHTLSTransportPumpFDCloserTests` | XCTest | pump-fd single ownership and the #237 shutdown/release split (`shutdownOnce` wakes without freeing, `closeOnce` releases exactly once, fd reuse, join ordering, full-buffer write, large outstanding send (hang regression for the parked-send case), actor-gone release, source tripwire, `SO_NOSIGPIPE`) (10) |
 | `TeleportTLSTrustTests` | Swift Testing | `TeleportTLSTrust` (chain/name/EKU/ALPN + DER fail-closed matrix) |
 | `TeleportHostLoginTests` | Swift Testing | `TeleportHostLogin` resolver + normalization + failure redaction (21) |
@@ -35,7 +36,9 @@
 | `TeleportCredentialInvalidationPolicyTests` | Swift Testing | the pure credential clear rule (6) |
 | `FixtureTests` | XCTest | the 8 committed Go SEP fixtures, byte-compared (8) |
 | `BrowserMFAListenerLoopbackTests` | XCTest | the loopback HTTP contract, including the A4 wait guards/token, the A5 over-cap discard-only drain, the A3 decode boundary, and the D2 complete-header 400 (38) |
-| `BrowserMFACeremonyLoopbackURLTests` | XCTest | real non-zero-port loopback URL + teardown + the not-started fail-fast (A7) (4) |
+| `BrowserMFACeremonyLoopbackURLTests` | XCTest | real non-zero-port loopback URL + teardown + the not-started fail-fast (A7), with the #405 presentation assertions driven through the injected listener stub (4) |
+| `BrowserMFACeremonyFailFastPinsTests` | Swift Testing | the #401/#405 listener-seam source pins: no wall clock in the fail-fast/approval-page/redaction ceremony tests, `run` builds through `makeListener(logger)`, the init keeps the production default (5) |
+| `MockTeleportBootstrapCoordinatorGateTests` | Swift Testing | the #277 `holdsForApproval`/`releaseApproval` gate seam: default-off, held-until-release, cancel-while-held + per-invocation reset, release-before-begin (4) |
 | `ProtoWireCompatTests` | XCTest | golden protobuf wire bytes (12) |
 | `WebAuthnResponseJSONTests` | XCTest | registration/assertion response JSON (7) |
 | `HeadlessLoginWireTests` | XCTest | `HeadlessLogin.post` (URL/200-only/error mapping) + coordinator failure paths (16) |
@@ -57,6 +60,8 @@
 | `TeleportKeyRingInvalidationConformanceTests` | Swift Testing | `TeleportCredentialInvalidating` on the real keyring (2) |
 | `TeleportCredentialPairPinsTests` | Swift Testing | source pins for the atomic pair write: one pair call per coordinator, the keyring pair body (non-async, key-first, suspend-free), the adapter's one-hop `MainActor.run`, and the real writer's update-first/non-destructive body (4) |
 | `TeleportLoginCoordinatorGenerationTests` | XCTest | the login request-generation guards (stale success/failure/cancel cannot land, the #298 per-site re-takes, the dismissal latch) and the atomic pair write: a superseded pair write cannot tear, one pair/zero singles, and the post-throw D4 states (20) |
+| `TeleportBootstrapCoordinatorRetryTests` | Swift Testing | the #267 retry contract: `retry()` re-runs `begin` (fresh POST + Safari), can reach `.success`, and no-ops without a prior `begin` (3) |
+| `MockWebAuthenticationSessionPresenterHelperTests` | Swift Testing | the #267 mock Safari helpers: `liveSessionCount` (no cancel-before-replace) and the bounded `waitUntilOpenStarted` (2) |
 | `TeleportDismissalTests` | XCTest | the exhaustive `dismissalRequiresTeardown` maps for both coordinator states + the login latch-while-the-pair-write-is-parked pair-lands-complete test (3) |
 | `TeleportCoordinatorSmokeTests` | Swift Testing | the three real coordinators against `TeleportTesting` mocks (3) |
 | `PublicSeamSmokeTests` | Swift Testing | the non-`@testable` v0.1.0 seam (7) |
