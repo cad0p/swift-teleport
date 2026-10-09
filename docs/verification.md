@@ -112,8 +112,8 @@ follow-up commits on the same branch; the PR description records the rounds.
   queries while only `sign` reads the cache (SEP-2). SEP-3's behavioural
   software-key test was dropped after its positive control measured
   `errSecItemNotFound` for the supplied 32-byte label (the macOS keychain
-  storifies the label), so the dictionary pin is the honest ceiling; the
-  device smoke stays owner-gated (residual, never a claim).
+  stores a 20-byte label hash), so the dictionary pin is the honest ceiling;
+  the device smoke stays owner-gated (residual, never a claim).
 
 ### Listener / browser-MFA change
 - `BrowserMFAListenerLoopbackTests` green — the loopback HTTP contract plus the
@@ -125,10 +125,11 @@ follow-up commits on the same branch; the PR description records the rounds.
   formatting tripwire: re-verify the discard-only property when
   restructuring.
 - The redaction and frozen-text pins stay in force for this surface:
-  `TeleportRedactionTests` (the listener rejection-reason hygiene and the
-  source-level privacy pin) and `TeleportFrozenTextTests` (the listener
-  defaults wiring) — a listener log or error-text change must keep both
-  green.
+  `TeleportRedactionTests` (`TeleportRedactionTests.swift:508-598`: the
+  listener rejection-reason hygiene and the source-level privacy pin) and
+  `TeleportFrozenTextTests` (`TeleportFrozenTextTests.swift:137-172`: the
+  listener defaults wiring) — a listener log or error-text change must keep
+  both green.
 
 ### Coordinator / keyring change
 - `TeleportKeyRingTests` + `TeleportCoordinatorSmokeTests` +

@@ -80,6 +80,10 @@ public final class SecureEnclaveSigner: WebAuthnSigner, SEPKeySigning {
         // `SecItemCopyMatching`. `loadKey` itself always queries the
         // keychain — the keychain, not the cache, is the truth for "is this
         // device registered" — so only this call site may consult the cache.
+        // Consequence of the fast path: a credential deleted from the
+        // keychain stays signable in-process until this cache is invalidated
+        // (the process ends) — pre-existing on both sides of this restore,
+        // not introduced by it.
         let key: SecKey
         if let cached = queue.sync(execute: { keys[credentialID] }) {
             key = cached

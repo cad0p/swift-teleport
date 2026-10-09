@@ -449,8 +449,8 @@ nonisolated final class BrowserMFAListenerLoopbackTests: XCTestCase {
     }
 
     /// A burst of connections must not accumulate per-connection buffers:
-    /// connections over the admission cap are answered 503 immediately and
-    /// do not resolve the login.
+    /// connections over the admission cap are answered 503 after the bounded
+    /// header drain and do not resolve the login.
     @MainActor
     func testAdmissionCapRejectsExcessConnections() async throws {
         let listener = BrowserMFAListener(timeout: 60, readTimeout: 30, maxConcurrentConnections: 1)
@@ -502,6 +502,14 @@ nonisolated final class BrowserMFAListenerLoopbackTests: XCTestCase {
     /// window; the drain waits for `\r\n\r\n` (or a bound). One
     /// `NWConnection.receive` is issued and the partial-then-terminator send
     /// completes it.
+    ///
+    /// The 250 ms negative window is a runnable-regression shape, not a
+    /// proof: the immediate-503 revision answers ~2 orders of magnitude
+    /// inside it, but under an extreme runner stall (or a deliberate answer
+    /// delay longer than 250 ms) the 503 could land after the nil check and
+    /// the later 503 / `!didResume` / slot assertions would still pass. The
+    /// window is deliberately not widened (host shape; no measured stall
+    /// justifies a different bound).
     @MainActor
     func testOverCapConnectionWaitsForTheRequestBeforeAnswering() async throws {
         let listener = BrowserMFAListener(timeout: 60, readTimeout: 120, maxConcurrentConnections: 1)

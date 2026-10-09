@@ -112,10 +112,11 @@ nonisolated final class BrowserMFAListener: NSObject, @unchecked Sendable {
     /// drained (discarded, never buffered) and *then* answered 503. That
     /// bounds each over-cap connection (one `readTimeout` timer, at most
     /// `maxRequestBytes` plus one ≤4 KiB read, no admission slot) but not
-    /// their count — the OS fd limit and accept rate are the only bound, so
-    /// a local flood can briefly pin sockets. The drain still cannot
-    /// *accumulate* memory per connection: every drained byte is thrown
-    /// away.
+    /// their count — the OS fd limit and accept rate are the only bound, and
+    /// every drained read shares the serial `ioQueue` with the genuine
+    /// callback, so a local flood can briefly pin sockets and contend for
+    /// that queue. The drain still cannot *accumulate* memory per
+    /// connection: every drained byte is thrown away.
     static let defaultMaxConcurrentConnections = 16
 
     private static let callbackPath = "/callback"
@@ -839,7 +840,9 @@ nonisolated private final class BrowserMFAHTTPConnection: @unchecked Sendable {
     ///
     /// The pre-rewrite listener drained before answering 503 so the kernel's
     /// RST could not discard the response before the client read it (the
-    /// `#233` class). The drain is discard-only — it never touches
+    /// `#233` class) — although that guarantee holds only when the header is
+    /// the whole request, since a body is never drained. The drain is
+    /// discard-only — it never touches
     /// `self.buffer`, so an over-cap client cannot pin per-connection memory —
     /// and bounded by the header terminator, `maxRequestBytes`, and
     /// `readTimeout`. A request body is never drained: the closure is

@@ -135,7 +135,8 @@ public final class TeleportKeyRing: ObservableObject, TeleportCredentialStore {
         // always queries the keychain (SEP-2 restored the pre-rewrite
         // behaviour: the keychain is the truth for "is this device
         // registered"), so every readiness computation issues one
-        // `SecItemCopyMatching` and `credentials` is NOT a probe cache. If
+        // `SecItemCopyMatching` (when a credential record exists) and
+        // `credentials` is NOT a probe cache. If
         // that per-render cost ever matters, the cache belongs here and its
         // invalidation point is credential removal — not a short-circuit
         // inside `loadKey`. Accepted trade-off (pre parity): a
