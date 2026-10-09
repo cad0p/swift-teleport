@@ -12,8 +12,8 @@ All notable changes to this project will be documented in this file.
 - `BrowserMFAListening` seam + a defaulted `makeListener` on `BrowserMFACeremony.init` (host
   `da56b322` #401; test halves `642117ee` #405) — additive; the fail-fast guard is driven through the
   seam.
-- `OpenSSHCertificate.rawBlob` + a public `sshString` wire builder (host `9445393e`, #268/#269) —
-  additive; agent forwarding stays host-side.
+- `OpenSSHCertificate.rawBlob` (host `9445393e`, #268/#269) + a public `sshString` wire builder
+  (package-side promotion) — additive; agent forwarding stays host-side.
 - `MockWebAuthenticationSessionPresenter` gains `liveSessionCount` + `waitUntilOpenStarted(_:timeout:)`
   (host `24e27af5`, #267).
 - **Correctness**: `SSHTLSTransport` arms `ReadyWaiter` **before** `connection.start(...)` and buffers
