@@ -133,6 +133,12 @@ public protocol TeleportCredentialStore: Sendable {
     ///   metadata). `.login` requires an existing record and throws
     ///   `TeleportCredentialStoreError.noRegisteredCredential` without writing
     ///   either half when it is missing.
+    ///
+    /// Conformer error contract: the coordinators log a thrown error with
+    /// `String(describing:)` at `.public` (host parity), so a conformer must
+    /// not throw an error whose description embeds a wire payload — the
+    /// in-repo conformers throw only `TeleportPackageError.keychain(status)`
+    /// and `TeleportCredentialStoreError`.
     func storeCredentialPair(
         _ certPEM: String,
         validBefore: Date,

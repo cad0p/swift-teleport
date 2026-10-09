@@ -32,7 +32,9 @@ xcodebuild build -scheme swift-teleport-Package \
 Expected: build clean (no warnings), **453 tests** pass (234 XCTest + 219
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
-iOS build succeeds.
+iOS build succeeds. The split is read from `swift test`'s output: the XCTest
+count from the `Executed <n> tests` line and the Swift Testing count from the
+`Test run with <n> tests in <m> suites` line.
 
 ## 3. Independent-review protocol
 
