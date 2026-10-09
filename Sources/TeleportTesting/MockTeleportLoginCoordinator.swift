@@ -124,4 +124,8 @@ public final class MockTeleportLoginCoordinator: ObservableObject, TeleportLogin
         cancelCallCount += 1
         state = .failed(.faceIDCancelled)
     }
+
+    /// The mock scripts no real continuation races; the latch is the real
+    /// coordinator's concern.
+    public func latchDismissal() {}
 }
