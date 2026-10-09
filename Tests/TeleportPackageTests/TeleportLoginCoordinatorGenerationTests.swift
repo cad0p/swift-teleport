@@ -395,6 +395,10 @@ nonisolated final class TeleportLoginCoordinatorGenerationTests: XCTestCase {
         XCTAssertEqual(http.loginBeginStartedCount, 1)
         XCTAssertEqual(http.loginFinishStartedCount, 1)
         XCTAssertEqual(store.storedLoginCertCount, 0)
+        XCTAssertEqual(
+            coordinator.state, .fetchingCert,
+            "a stray begin after the latch must not reset or re-arm the flow (guard-deleted: .success)"
+        )
     }
 
     /// A stale `loginBegin` *failure* must not overwrite the newer attempt's
