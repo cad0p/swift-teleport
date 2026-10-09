@@ -44,10 +44,13 @@ SEP load and browser-MFA fail-fast/drain parity (#42), matching the host issue
   connection (header terminator / max request size / read timeout), unbounded in count, taking no
   admission slot; a complete but unparseable header block is answered 400 immediately instead of
   waiting out the read deadline;
-- the accepted-delta record comments (A2, A3, A6, A7, A8/D1/D3/D4) match the host's 14-row table.
+- the accepted-delta record comments (A2, A3, A6, A7, A8/D1/D3/D4/cosmetic) match the host's
+  14-row table.
 
-Tests: 453 → 467 (248 XCTest + 219 Swift Testing). The host's `#306` `OpenSSHEd25519PrivateKeyTests`
-flake hunk is deliberately not ported (no package equivalent; test-only).
+Tests across the release: 428 → 467 (248 XCTest + 219 Swift Testing); #42 alone is 453 → 467. The
+host's [`cad0p/vvterm#306`](https://github.com/cad0p/vvterm/issues/306)
+`OpenSSHEd25519PrivateKeyTests` flake hunk (host PR #305) is deliberately not ported (no package
+equivalent; test-only).
 <!-- USER-EDITABLE SECTION END -->
 
 ### 🐛 Bug Fixes
