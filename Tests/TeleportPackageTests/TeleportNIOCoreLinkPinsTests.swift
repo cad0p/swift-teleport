@@ -10,10 +10,14 @@
 //  Why a source pin: the defect is a *link-time* dependency on a retroactive
 //  conformance declared in swift-nio's separate `NIOFoundationEssentialsCompat`
 //  module (public product, swift-nio `Package.swift:54`) that `TeleportCore`
-//  does not declare. `body.append(contentsOf: buffer.readableBytesView)` picks
-//  the `ContiguousBytes` overload, so the object file references the
-//  conformance descriptor; under Xcode 27 that link succeeds statically (the
-//  package's own builds) but fails for a dynamic-framework consumer
+//  does not declare. `body.append(contentsOf: buffer.readableBytesView)` can
+//  pick the `ContiguousBytes` overload, making the object file reference the
+//  conformance descriptor. The resolver choice is toolchain-dependent: the
+//  Xcode 27 object file references it (and the dynamic-framework link then
+//  fails), while an Xcode 26.3 object file was measured referencing only the
+//  NIOCore-native `ByteBufferView: Swift.Sequence` witness (lens-1 MINOR-2,
+//  measured pre-fix). Either way the static link succeeds (the package's own
+//  builds); the failure is the dynamic-framework consumer
 //  (`PackageFrameworks/TeleportCore.framework`, iOS Simulator Debug
 //  `build-for-testing`, vvterm#425 `build` job `114001367173`):
 //
@@ -45,7 +49,12 @@
 //  re-derivation of this pin; (e) the positive control pins the current
 //  `getBytes(at:length:)` copy shape — the equally valid
 //  `withUnsafeReadableBytes` spelling is refused until the pin is updated on
-//  purpose.
+//  purpose; (f) the comment stripper below does not understand raw strings
+//  (`#"…"#`) or regex literals, so an unclosed `/*` inside one (e.g.
+//  `let s = #"a"/*"#; let t = readableBytesView`, or a regex literal
+//  `let re = /[/*]/; …`) swallows the rest of the file and can hide a token
+//  after it (lens-1 MINOR-1, measured); the stripper doc's cross-reference
+//  below names this row.
 //
 //  Counterfactual hook: the package pins resolve the repository root from
 //  `#filePath` (no host-only `VVTERM_PINS_SOURCE_ROOT` override, per this
@@ -91,8 +100,10 @@ struct TeleportNIOCoreLinkPinsTests {
     /// sibling pin suites (`TeleportCredentialPairPinsTests`,
     /// `SSHTLSTransportReadyWaiterTests`) because SwiftPM targets cannot share
     /// a source file; keep the scanners in sync if either changes. The scanner
-    /// does not understand raw strings (`#"…"#`) or comments inside an
-    /// interpolation — the header defeat list records both.
+    /// does not understand raw strings (`#"…"#`), regex literals, or comments
+    /// inside an interpolation — defeat (f) in the header records the measured
+    /// consequence (an unclosed `/*` inside a raw string/regex swallows the
+    /// remainder of the file).
     private static func strippingComments(_ source: String) -> String {
         let characters = Array(source)
         var result = ""
@@ -210,8 +221,8 @@ struct TeleportNIOCoreLinkPinsTests {
     func testSourcesKeepOffTheUndeclaredNIOConformance() throws {
         let files = Self.swiftFiles(under: repositoryRoot().appendingPathComponent("Sources"))
         #expect(
-            !files.isEmpty,
-            "the Sources scan must enumerate at least one Swift file — re-derive the source root (issue #66)"
+            files.count >= 40,
+            "the Sources scan must enumerate the package's sources (≥40 files; measured 55 at #66) — re-derive the source root (issue #66)"
         )
 
         // Coverage guard: a path-derivation mistake must fail loudly, not pass
