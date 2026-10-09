@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug Fixes
 
 - *(teleport)* Write the cert and its private key as one atomic pair (closes #41)
+- *(teleport)* Restore the pre-rewrite SEP load and browser-MFA fail-fast/drain behaviours (closes #42)
 
 ### 📚 Documentation
 
