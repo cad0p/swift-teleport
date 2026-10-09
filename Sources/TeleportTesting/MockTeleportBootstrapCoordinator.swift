@@ -101,11 +101,16 @@ public final class MockTeleportBootstrapCoordinator: ObservableObject, TeleportB
 
     /// When true, `begin` parks in `.awaitingApproval` after its normal
     /// delay and waits for `releaseApproval()` — the phase-chain UI test's
-    /// deterministic hold. The hold is one-shot: it applies to the first
-    /// `begin` after construction, and a released or cancelled hold does not
-    /// re-engage on a later `begin`. A parked invocation superseded by a
-    /// later `begin` returns without writing state. Default false: every
-    /// non-gated instance is behaviour-identical to before (issue #277).
+    /// deterministic hold. The hold is one-shot per release: it applies to
+    /// the first `begin` after construction, and a hold released by
+    /// `releaseApproval()` or by `cancel()` does not re-engage on a later
+    /// `begin` (a hold that self-released on the 30 s deadline leaves
+    /// `approvalReleased == false`, so a later `begin` does re-engage it).
+    /// A parked invocation superseded by a later `begin` returns without
+    /// writing state. Default false: sequential usage (one `begin` at a
+    /// time) is behaviour-identical to before; a superseded non-gated
+    /// invocation now returns without writing state instead of clobbering
+    /// the newer one (issue #277).
     private let holdsForApproval: Bool
 
     /// Set by `releaseApproval()` (or by `cancel()` while held). Idempotent.
@@ -169,8 +174,10 @@ public final class MockTeleportBootstrapCoordinator: ObservableObject, TeleportB
         // before the cancellation guard/switch (issue #277).
         guard generation == beginGeneration else { return }
         // Scoped to the gated path: a cancelled non-gated instance still
-        // falls through to its scenario switch exactly as before, keeping
-        // the default-off path behaviour-identical.
+        // falls through to its scenario switch exactly as before. The
+        // generation guard above is unconditional, so a superseded non-gated
+        // invocation returns without writing state instead of clobbering the
+        // newer one.
         if holdsForApproval && (cancelledWhileHeld || Task.isCancelled) { return }
 
         switch scenario {
