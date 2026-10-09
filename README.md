@@ -14,7 +14,7 @@ app supply its own keychain, logging, credential store, and in-app browser.
 
 ## Status
 
-`v0.4.0` is the current release of the **full client product set** (D5):
+`v0.5.0` is the current release of the **full client product set** (D5):
 `TeleportCore`, `TeleportAuth`, and `TeleportTesting`. It ships the
 gRPC/protobuf transport (SwiftNIO + SwiftProtobuf), the WebAuthn/SEP machinery
 with the byte-exact Go-generated fixture oracle, the three coordinators, the

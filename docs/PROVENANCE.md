@@ -58,6 +58,13 @@ tree:
   with a per-wait token, the discard-only over-cap drain, the immediate 400 on
   a malformed complete header), plus the accepted-delta record comments — host
   parity with `cad0p/vvterm` #242 (`062d25ba`).
+- **v0.5.0** carries `56cdbec` (#48) — the login continuation guards and the dismissal latch: the
+  login coordinator's monotonic request-generation token with a re-take after every suspension point
+  (host `eccec38f`, #240/#279, host fix PR #297), the #298 per-site pin tests (host `dd3ed8bc`, host
+  fix PR #307), and the synchronous dismissal latch — `latchDismissal()` on the public coordinating
+  protocols with no protocol-extension default (source-breaking for out-of-package conformers), a
+  `private(set) isDismissalLatched` flag that makes `begin()` / bootstrap `retry()` terminal, and the
+  public exhaustive `dismissalRequiresTeardown` maps (host `4253f48e`, #272, host fix PR #278).
 
 The import preserves file content except for:
 
