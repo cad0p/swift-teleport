@@ -39,8 +39,9 @@ enum TeleportStoredCredentialBinding {
 
     /// Classify a live credential snapshot's cert against the configured
     /// username. Synchronous by design: each caller awaits
-    /// `liveCredentialSnapshot` itself and keeps its own generation re-takes
-    /// around that read.
+    /// `liveCredentialSnapshot` itself and keeps its own continuation guards
+    /// around that read (the bootstrap coordinator's generation re-takes; the
+    /// login coordinator has none yet — follow-up #48).
     static func readBoundCert(
         snapshot: (certPEM: String, privateKeyPEM: Data)?,
         username: String
