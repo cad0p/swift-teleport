@@ -41,3 +41,35 @@ final class StubBrowserMFASessionHandle: BrowserMFASessionHandle {
         cancelCount += 1
     }
 }
+
+/// A presenter stub whose handle reports `didStart == false`, so the
+/// ceremony's fail-fast guard is exercised without Safari (A7). The handle
+/// is retained so tests can assert the ceremony's `defer` cancels it. Each
+/// stub carries `nonisolated deinit {}` like the other package stubs so the
+/// back-deployed isolated-deinit abort cannot bite an unreleased test type.
+@MainActor
+final class NotStartedBrowserMFAPresenter: BrowserMFAPresenting {
+    nonisolated deinit {}
+    private(set) var handle: NotStartedBrowserMFASessionHandle?
+
+    func present(
+        url: URL,
+        completion: @escaping @Sendable (Error?) -> Void
+    ) async -> any BrowserMFASessionHandle {
+        let handle = NotStartedBrowserMFASessionHandle()
+        self.handle = handle
+        return handle
+    }
+}
+
+/// A session handle that never started.
+@MainActor
+final class NotStartedBrowserMFASessionHandle: BrowserMFASessionHandle {
+    nonisolated deinit {}
+    let didStart = false
+    private(set) var cancelCount = 0
+
+    func cancel() {
+        cancelCount += 1
+    }
+}
