@@ -45,6 +45,19 @@ tree:
   client throws the structured `HeadlessError.http(status:body:)` (and a
   body-free `HeadlessError.decode` at the 200-empty-cert site), so the log
   carries `HTTP <status>` and the login state reaches `.server(message)`.
+- **v0.4.0** carries `9c86cba` (#41) and `22efb09` (#42). `9c86cba` is the
+  atomic credential pair: `TeleportCredentialStore` gains the
+  `storeCredentialPair` requirement (source-breaking for out-of-package
+  conformers), implemented by `TeleportKeyRing` as a synchronous `throws`
+  witness whose non-suspending `@MainActor` body commits the ed25519 key and
+  the credential record together with an update-first, non-destructive key
+  write — scope: interleaving atomicity, not crash durability. `22efb09`
+  restores the pre-rewrite SEP `loadKey` semantics (the `kSecAttrTokenID`
+  Secure Enclave token scope, keychain-always with the cache as `sign`'s fast
+  path) and the browser-MFA fail-fast/drain behaviours (concurrent-wait guards
+  with a per-wait token, the discard-only over-cap drain, the immediate 400 on
+  a malformed complete header), plus the accepted-delta record comments — host
+  parity with `cad0p/vvterm` #242 (`062d25ba`).
 
 The import preserves file content except for:
 
