@@ -29,7 +29,7 @@ xcodebuild build -scheme swift-teleport-Package \
   -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
 ```
 
-Expected: build clean (no warnings), **507 tests** pass (267 XCTest + 240
+Expected: build clean (no warnings), **508 tests** pass (267 XCTest + 241
 Swift Testing across `TeleportCoreTests` + `TeleportCoreConsumerTests` +
 `TeleportPackageTests`), fixture package builds, boundary check OK, selftest OK,
 iOS build succeeds. The split is read from `swift test`'s output: the XCTest
@@ -91,10 +91,12 @@ follow-up commits on the same branch; the PR description records the rounds.
   `runPump`'s wake-before-join/release-after-join ordering, the two-argument
   `closeOnce` call-site allowlist, and the in-lock syscalls.
   `SSHTLSTransportReadyWaiterTests` covers the #237 `ReadyWaiter` pre-`start`
-  arm: the fast-`.ready`/failure buffering, first-terminal-wins, and the
-  arm-before-`start` source pin (the ordering is not behaviourally
-  reproducible — the race only loses under host starvation). Also green: the
-  loopback handshake and the fail-closed DER matrix.
+  arm: the fast-`.ready`/failure buffering, first-terminal-wins, the
+  second-concurrent-wait guard (one winner, one already-attached failure, the
+  winner still resolves), and the arm-before-`start` source pin (the ordering
+  is not behaviourally reproducible — the race only loses under host
+  starvation; the pin strips comments and requires a unique anchor). Also
+  green: the loopback handshake and the fail-closed DER matrix.
 - Re-check the `nonisolated` markers on `TeleportTLSTrust` and
   `TeleportLogging` if isolation changed, and — when `SSHTLSTransport`,
   `PumpFDCloser`, or any coordinator/generator/keyring class is touched — that
