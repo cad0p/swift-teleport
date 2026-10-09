@@ -333,7 +333,8 @@ struct TeleportCredentialPairPinsTests {
     }
 
     /// Pin 4: the real ed25519 keychain write is `SecItemUpdate`-first and
-    /// never deletes the prior item. Body-scoped because `clear()` (same file)
+    /// never deletes the prior item (the add path's accessibility attribute is
+    /// pinned too). Body-scoped because `clear()` (same file)
     /// also contains `SecItemDelete(`, and every writer failure must be
     /// fail-closed (throw) rather than destructive.
     ///
@@ -381,6 +382,14 @@ struct TeleportCredentialPairPinsTests {
         #expect(
             Self.occurrences(of: "SecItemUpdate(", in: text, range: body).count == 1,
             "the writer must update the item exactly once (no delete/retry loop)"
+        )
+        #expect(
+            Self.occurrences(
+                of: "kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly",
+                in: text,
+                range: body
+            ).count == 1,
+            "the first-add path must set kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly exactly once"
         )
     }
 }
