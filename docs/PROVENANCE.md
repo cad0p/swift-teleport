@@ -77,6 +77,12 @@ tree:
   pre-`start` arm), and `414dda9c` (#277 — the
   `MockTeleportBootstrapCoordinator` `holdsForApproval`/`releaseApproval`
   gate seam).
+- **v0.5.2** carries `afae5bc` (#66/#67) — the Xcode 27 dynamic-framework link fix:
+  `GRPCClient` copies the gRPC body with NIOCore's `getBytes(at:length:)` instead of the
+  `ContiguousBytes` overload on `readableBytesView`, whose retroactive conformance lives in
+  swift-nio's undeclared `NIOFoundationEssentialsCompat` product and failed the required
+  `build` link on Xcode 27. Adds the `TeleportNIOCoreLinkPinsTests` source pin. Internal code
+  change; no public API change.
 
 The import preserves file content except for:
 
